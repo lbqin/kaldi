@@ -44,6 +44,31 @@ namespace kaldi {
 // remaining (n/2) - 1 elements are undefined at output.
 void ComputePowerSpectrum(VectorBase<BaseFloat> *complex_fft);
 
+/// PowerSpecToRealCeps takes the output of ComputePowerSpectrum (which is a
+/// squared magnitude spectrum) and produces the real cepstrum coefficients.
+/// If the power spectrum corresponds to an N-point FFT, then only the first
+/// N/2 + 1 elements of it are calculated by ComputePowerSpectrum. This function
+/// recreates the symmetric log-magnitude spectrum by filling in the remaining
+/// N/2 - 1 values and computes an IFFT. The IFFT computation happens "in-place"
+/// and the first N/2 + 1 elements of the vector are the real part of the
+/// cepstral coefficients (the imaginary parts should be 0 anyway, since the
+/// power spectrum is symmetric/even). Contents of the last last N/2 - 1 elements
+/// are undefined at output, as they are not needed (as real cepstrum is even).
+template<class Real>
+void PowerSpecToRealCeps(VectorBase<Real> *power_spectrum);
+
+/// RealCepsToMagnitudeSpec takes the output of PowerSpecToRealCeps and computes
+/// an N-point FFT. PowerSpecToRealCeps computes only the first N/2 + 1 elements
+/// (corresponding to positive quefrencies). This function recreates the symmetric
+/// real cepstrum by filling in the remaining N/2 - 1 values and computes an FFT.
+/// The FFT computation happens "in-place" and the first N/2 + 1 elements of the
+/// vector are the real part of the log magnitude spectrum (the imaginary parts
+/// should be close to 0). Contents of the last last N/2 - 1 elements are
+/// undefined at output, as they are not needed.
+template<class Real>
+void RealCepsToMagnitudeSpec(VectorBase<Real> *real_cepstrum, bool apply_exp);
+
+
 
 struct DeltaFeaturesOptions {
   int32 order;

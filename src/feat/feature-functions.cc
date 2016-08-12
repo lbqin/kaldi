@@ -50,6 +50,74 @@ void ComputePowerSpectrum(VectorBase<BaseFloat> *waveform) {
   // if the signal has been bandlimited sensibly this should be zero.
 }
 
+  // no, letting it be non-power-of-two for now.
+  // KALDI_ASSERT(dim > 0 && (dim & (dim-1) == 0));  // make sure a power of two.. actually my FFT code
+  // does not require this (dan) but this is better in case we use different code [dan].
+
+template<class Real>
+void PowerSpecToRealCeps(VectorBase<Real> *power_spectrum) {
+  int32 dim = power_spectrum->Dim();
+  int32 half_dim = dim/2;
+  power_spectrum->Range(0, half_dim+1).ApplyLog();
+  power_spectrum->Range(0, half_dim+1).Scale(0.5);  // square root
+  // Now reconstruct the last N/2 - 1 elements of the symmetric spectrum that
+  // correspond to the negative frequencies.
+  /*for (int32 i = 1; i < half_dim; i++)
+    (*power_spectrum)(dim-i) = (*power_spectrum)(i);
+
+    RealFft(power_spectrum, true);  // Doing FFT not IFFT; this is correct.
+    power_spectrum->Scale(1.0/dim); 
+    Real last_cepstrum = (*power_spectrum)(1);
+  for (int32 i = 1; i < half_dim; i++) {
+    Real real = (*power_spectrum)(i*2),
+      im = (*power_spectrum)(i*2 + 1);
+    (*power_spectrum)(i) = real;
+    KALDI_ASSERT(std::abs(im) <= 1e-4 &&
+                 "Real cepstrum not expected to have imaginary value.");
+  }
+  (*power_spectrum)(half_dim) = last_cepstrum;*/
+  Real niq_power = (*power_spectrum)(half_dim);
+  for (int32 i = 1; i < half_dim; i++) {
+      (*power_spectrum)(dim-2*i) = (*power_spectrum)(half_dim - i);
+      (*power_spectrum)(dim-2*i + 1) = 0;
+  }
+  (*power_spectrum)(1) = niq_power;
+  RealFft(power_spectrum, false);  // Doing IFFT.
+  power_spectrum->Scale(1.0/dim);
+}
+
+template void PowerSpecToRealCeps(VectorBase<float> *power_spectrum);
+template void PowerSpecToRealCeps(VectorBase<double> *power_spectrum);
+
+
+template<class Real>
+void RealCepsToMagnitudeSpec(VectorBase<Real> *real_cepstrum, bool apply_exp) {
+  int32 dim = real_cepstrum->Dim();
+  int32 half_dim = dim/2;
+  // Now reconstruct the last N/2 - 1 elements of the symmetric cepstrum that
+  // correspond to the negative quefrencies.
+  for (int32 i = 1; i < half_dim; i++)
+    (*real_cepstrum)(dim-i) = (*real_cepstrum)(i);
+  RealFft(real_cepstrum, true);
+  Real last_spectrum = (*real_cepstrum)(1);
+  for (int32 i = 1; i < half_dim; i++) {
+    Real real = (*real_cepstrum)(i*2),
+      im = (*real_cepstrum)(i*2 + 1);
+    (*real_cepstrum)(i) = real;
+    KALDI_ASSERT(std::abs(im) <= 1e-4 &&
+                 "FFT of real cepstrum not expected to have imaginary value.");
+  }
+  (*real_cepstrum)(half_dim) = last_spectrum;
+  //real_cepstrum->Scale(dim);
+  if (apply_exp)
+    real_cepstrum->Range(0, half_dim+1).ApplyExp();
+}
+
+template void RealCepsToMagnitudeSpec(VectorBase<float> *real_cepstrum,
+                                      bool apply_exp);
+template void RealCepsToMagnitudeSpec(VectorBase<double> *real_cepstrum,
+                                      bool apply_exp);
+
 
 DeltaFeatures::DeltaFeatures(const DeltaFeaturesOptions &opts): opts_(opts) {
   KALDI_ASSERT(opts.order >= 0 && opts.order < 1000);  // just make sure we don't get binary junk.

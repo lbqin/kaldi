@@ -62,8 +62,16 @@ MelBanks::MelBanks(const MelBanksOptions &opts,
   BaseFloat fft_bin_width = sample_freq / window_length_padded;
   // fft-bin width [think of it as Nyquist-freq / half-window-length]
 
-  BaseFloat mel_low_freq = MelScale(low_freq);
-  BaseFloat mel_high_freq = MelScale(high_freq);
+  //BaseFloat mel_low_freq = MelScale(low_freq);
+  //BaseFloat mel_high_freq = MelScale(high_freq);
+  BaseFloat mel_low_freq, mel_high_freq;
+  if (opts.use_bark_scale) {
+    mel_low_freq = BarkScale(low_freq);
+    mel_high_freq = BarkScale(high_freq);
+  } else {
+    mel_low_freq = MelScale(low_freq);
+    mel_high_freq = MelScale(high_freq);
+  }
 
   debug_ = opts.debug_mel;
 
@@ -101,7 +109,11 @@ MelBanks::MelBanks(const MelBanksOptions &opts,
       right_mel = VtlnWarpMelFreq(vtln_low, vtln_high, low_freq, high_freq,
                                   vtln_warp_factor, right_mel);
     }
-    center_freqs_(bin) = InverseMelScale(center_mel);
+    //center_freqs_(bin) = InverseMelScale(center_mel);
+    if (opts.use_bark_scale)
+      center_freqs_(bin) = InverseBarkScale(center_mel);
+    else
+      center_freqs_(bin) = InverseMelScale(center_mel);
     // this_bin will be a vector of coefficients that is only
     // nonzero where this mel bin is active.
     Vector<BaseFloat> this_bin(num_fft_bins);
@@ -109,7 +121,12 @@ MelBanks::MelBanks(const MelBanksOptions &opts,
     for (int32 i = 0; i < num_fft_bins; i++) {
       BaseFloat freq = (fft_bin_width * i);  // Center frequency of this fft
                                              // bin.
-      BaseFloat mel = MelScale(freq);
+      //BaseFloat mel = MelScale(freq);
+      BaseFloat mel;
+      if (opts.use_bark_scale)
+        mel = BarkScale(freq);
+      else
+        mel = MelScale(freq);
       if (mel > left_mel && mel < right_mel) {
         BaseFloat weight;
         if (mel <= center_mel)

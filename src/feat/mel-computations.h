@@ -53,9 +53,10 @@ struct MelBanksOptions {
   // Enables more exact compatibibility with HTK, for testing purposes.  Affects
   // mel-energy flooring and reproduces a bug in HTK.
   bool htk_mode;
+  bool use_bark_scale;
   explicit MelBanksOptions(int num_bins = 25)
       : num_bins(num_bins), low_freq(20), high_freq(0), vtln_low(100),
-        vtln_high(-500), debug_mel(false), htk_mode(false) {}
+        vtln_high(-500), debug_mel(false), htk_mode(false), use_bark_scale(false) {}
 
   void Register(OptionsItf *opts) {
     opts->Register("num-mel-bins", &num_bins,
@@ -71,6 +72,8 @@ struct MelBanksOptions {
                    " (if negative, offset from high-mel-freq");
     opts->Register("debug-mel", &debug_mel,
                    "Print out debugging information for mel bin computation");
+    opts->Register("use-bark-scale", &use_bark_scale,
+                   "Use Bark scale instead of Mel for band computation");
   }
 };
 
@@ -84,6 +87,14 @@ class MelBanks {
 
   static inline BaseFloat MelScale(BaseFloat freq) {
     return 1127.0f * logf (1.0f + freq / 700.0f);
+  }
+
+  static inline BaseFloat InverseBarkScale(BaseFloat mel_freq) {
+      return  1960.0f / (26.81f / (mel_freq + 0.53f) - 1.0f);
+  }
+
+  static inline BaseFloat BarkScale(BaseFloat freq) {
+      return 26.81f / (1960.0f / freq + 1.0) - 0.53;
   }
 
   static BaseFloat VtlnWarpFreq(BaseFloat vtln_low_cutoff,
