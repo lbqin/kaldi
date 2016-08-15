@@ -45,7 +45,7 @@ for step in dur acoustic; do
     done
     # Special case to reverse the output feature transform
     cat $dnndir/final.feature_transform \
-        | utils/convert_transform.sh \
+        | local/convert_transform.sh \
         | nnet-copy - $outputdir/$step/reverse_final.feature_transform
     # Turn features into binary as well
     for i in $dnndir/{cmvn_glob.ark,cmvn_out_glob.ark}; do

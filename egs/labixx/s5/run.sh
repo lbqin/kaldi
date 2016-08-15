@@ -1,4 +1,3 @@
-#!/bin/bash
 source cmd.sh
 source path.sh
 H=`pwd`  #exp home
@@ -6,7 +5,7 @@ n=4
 thchs=/home/sooda/data/thchs30-openslr
 srate=16000
 FRAMESHIFT=0.005
-featdir=/home/sooda/data/features
+featdir=/home/sooda/features
 corpus_dir=/home/sooda/data/tts/labixx120
 test_dir=/home/sooda/data/tts/test
 #lang=data/lang
@@ -16,9 +15,7 @@ train=data/full
 lang=data/lang_phone
 dict=data/dict_phone
 
-exp=exp_dnn1
-durdir=durdata
-lbldurdir=lbldurdata
+exp=exp_dnn
 expdurdir=$exp/tts_dnn_dur_3_delta_quin5
 dnndir=$exp/tts_dnn_train_3_deltasc2_quin5
 #config
@@ -30,9 +27,9 @@ ALIGNMENT_PHONE=0
 GENERATE_LABLE=0
 GENERATE_STATE=0
 CONVERT_FEATURE=0
-TRAIN_DNN=1
+TRAIN_DNN=0
 PACKAGE_DNN=1
-VOCODER_TEST=1
+VOCODER_TEST=0
 spk="lbx"
 audio_dir=$corpus_dir/wav 
 prompt_lab=prompt_labels
@@ -40,7 +37,8 @@ state_lab=states
 lab=labels
 acdir=data
 lbldir=lbldata
-ali=$expa/quin_ali_full
+durdir=durdata
+lbldurdir=lbldurdata
 
 echo "##### Step 0: data preparation #####"
 if [ $DATA_PREP_MARY -gt 0 ]; then
@@ -98,7 +96,7 @@ if [ $EXTRACT_FEAT -gt 0 ]; then
     for step in train dev; do
         rm -f data/$step/feats.scp
         # Generate f0 features
-        local/make_pitch.sh --pitch-config conf/pitch.conf data/$step exp/make_pitch/$step   $featdir;
+        steps/make_pitch.sh --pitch-config conf/pitch.conf data/$step exp/make_pitch/$step   $featdir;
         cp data/$step/pitch_feats.scp data/$step/feats.scp
         # Compute CMVN on pitch features, to estimate min_f0 (set as mean_f0 - 2*std_F0)
         steps/compute_cmvn_stats.sh data/$step exp/compute_cmvn_pitch/$step $featdir;
@@ -114,15 +112,15 @@ if [ $EXTRACT_FEAT -gt 0 ]; then
         mcepflen=`awk -v f0=$min_f0 'BEGIN{printf "%d", 2.3 * 1000.0 / f0 + 0.5}'`
         f0flen=`awk -v f0=$min_f0 'BEGIN{printf "%d", 2.3 * 1000.0 / f0 + 0.5}'`
         echo "using wsizes: $bndapflen $mcepflen"
-        local/subset_data_dir.sh --spk $spk data/$step 100000 data/${step}_$spk
+        subset_data_dir.sh --spk $spk data/$step 100000 data/${step}_$spk
         #cp data/$step/pitch_feats.scp data/${step}_$spk/
         # Regenerate pitch with more appropriate window
-        local/make_pitch.sh --pitch-config conf/pitch.conf --frame_length $f0flen data/${step}_$spk exp/make_pitch/${step}_$spk  $featdir;
+        steps/make_pitch.sh --pitch-config conf/pitch.conf --frame_length $f0flen data/${step}_$spk exp/make_pitch/${step}_$spk  $featdir;
         # Generate Band Aperiodicity feature
-        local/make_bndap.sh --bndap-config conf/bndap.conf --frame_length $bndapflen data/${step}_$spk exp/make_bndap/${step}_$spk  $featdir
+        steps/make_bndap.sh --bndap-config conf/bndap.conf --frame_length $bndapflen data/${step}_$spk exp/make_bndap/${step}_$spk  $featdir
         # Generate Mel Cepstral features
         #steps/make_mcep.sh  --sample-frequency $srate --frame_length $mcepflen  data/${step}_$spk exp/make_mcep/${step}_$spk   $featdir	
-        local/make_mcep.sh --sample-frequency $srate data/${step}_$spk exp/make_mcep/${step}_$spk   $featdir	
+        steps/make_mcep.sh --sample-frequency $srate data/${step}_$spk exp/make_mcep/${step}_$spk   $featdir	
         # Merge features
         cat data/${step}_*/bndap_feats.scp > data/$step/bndap_feats.scp
         cat data/${step}_*/mcep_feats.scp > data/$step/mcep_feats.scp
@@ -179,6 +177,7 @@ if [ $ALIGNMENT_PHONE -gt 0 ]; then
     steps/align_si.sh  --nj 1 --cmd "$train_cmd" \
       $train $lang $expa/quin $expa/quin_ali_full
 
+    ali=$expa/quin_ali_full
     # Extract phone alignment
     ali-to-phones --per-frame $ali/final.mdl ark:"gunzip -c $ali/ali.*.gz|" ark,t:- \
       | utils/int2sym.pl -f 2- $lang/phones.txt > $ali/phones.txt
@@ -190,7 +189,6 @@ if [ $ALIGNMENT_PHONE -gt 0 ]; then
         exit
     fi
 fi
-
 
 if [ $GENERATE_LABLE -gt 0 ]; then
     mkdir -p $prompt_lab
@@ -315,7 +313,7 @@ if [ $CONVERT_FEATURE -gt 0 ]; then
 
     # Split in train / dev
     for step in train dev; do
-      dir=lbldata/$step
+      dir=$lbldir/$step
       mkdir -p $dir
       #cp data/$step/{utt2spk,spk2utt} $dir
       utils/filter_scp.pl data/$step/utt2spk $featdir/in_feats_full.scp > $dir/feats.scp
@@ -326,7 +324,7 @@ if [ $CONVERT_FEATURE -gt 0 ]; then
 
     # Same for duration
     for step in train dev; do
-      dir=lbldurdata/$step
+      dir=$lbldurdir/$step
       mkdir -p $dir
       #cp data/$step/{utt2spk,spk2utt} $dir
       utils/filter_scp.pl data/$step/utt2spk $featdir/in_durfeats_full.scp > $dir/feats.scp
@@ -334,7 +332,7 @@ if [ $CONVERT_FEATURE -gt 0 ]; then
       utils/utt2spk_to_spk2utt.pl < $dir/utt2spk > $dir/spk2utt
       steps/compute_cmvn_stats.sh $dir $dir $dir
 
-      dir=durdata/$step
+      dir=$durdir/$step
       mkdir -p $dir
       #cp data/$step/{utt2spk,spk2utt} $dir
       utils/filter_scp.pl data/$step/utt2spk $featdir/out_durfeats_full.scp > $dir/feats.scp
@@ -373,22 +371,16 @@ if [ $TRAIN_DNN -gt 0 ]; then
     #dir=$exp/tts_dnn_train_3e
     #$cuda_cmd $dir/_train_nnet.log steps/train_nnet_basic.sh --config conf/3-layer-nn.conf --learn_rate 0.2 --momentum 0.1 --halving-factor 0.5 --min_iters 15 --randomize true --bunch_size 50 --mlpOption " " --hid-dim 300 $lbldir/train $lbldir/dev $acdir/train $acdir/dev $dir
 
-    rm -rf $expdurdir
-    rm -rf $dnndir
-
     echo " ### Step 4a: duration model DNN ###"
-    $cuda_cmd $expdurdir/_train_nnet.log local/train_nnet_basic.sh --delta_order 2 --config conf/3-layer-nn-splice5.conf --learn_rate 0.02 --momentum 0.1 --halving-factor 0.5 --min_iters 15 --max_iters 50 --randomize true --cache_size 50000 --bunch_size 200 --mlpOption " " --hid-dim 100 $lbldurdir/train $lbldurdir/dev $durdir/train $durdir/dev $expdurdir
-    #(tail --pid=$$ -F $expdurdir/log/train_nnet.log 2>/dev/null)& # forward log
-    #$train_cmd $expdurdir/log/train_nnet.log \
-    #steps/nnet/train.sh --copy_feats false --cmvn-opts "--norm-means=true --norm-vars=false" --hid-layers 3 --hid-dim 100 \
-	#--learn-rate 0.02 $lbldurdir/train $lbldurdir/dev $lang exp-align/quin_ali_full exp-align/quin_ali_full $expdurdir || exit 1;
+    # A. Small one for duration modelling
+    rm -rf $expdurdir
+    $train_cmd $expdurdir/_train_nnet.log local/train_nnet_basic.sh --delta_order 2 --config conf/3-layer-nn-splice5.conf --learn_rate 0.02 --momentum 0.1 --halving-factor 0.5 --min_iters 15 --max_iters 50 --randomize true --cache_size 50000 --bunch_size 200 --mlpOption " " --hid-dim 100 $lbldurdir/train $lbldurdir/dev $durdir/train $durdir/dev $expdurdir
 
+    # B. Larger DNN for acoustic features
     echo " ### Step 4b: acoustic model DNN ###"
-    $cuda_cmd $dnndir/_train_nnet.log local/train_nnet_basic.sh --delta_order 2 --config conf/3-layer-nn-splice5.conf --learn_rate 0.04 --momentum 0.1 --halving-factor 0.5 --min_iters 15 --randomize true --cache_size 50000 --bunch_size 200 --mlpOption " " --hid-dim 700 $lbldir/train $lbldir/dev $acdir/train $acdir/dev $dnndir
-    #(tail --pid=$$ -F $dnndir/log/train_nnet.log 2>/dev/null)& # forward log
-    #$train_cmd $dnndir/log/train_nnet.log \
-    #steps/nnet/train.sh --copy_feats false --cmvn-opts "--norm-means=true --norm-vars=false" --hid-layers 3 --hid-dim 700 \
-	#--learn-rate 0.04 $lbldir/train $lbldir/dev $lang $acdir/train $acdir/dev $dnndir || exit 1;
+
+    rm -rf $dnndir
+    $train_cmd $dnndir/_train_nnet.log local/train_nnet_basic.sh --delta_order 2 --config conf/3-layer-nn-splice5.conf --learn_rate 0.04 --momentum 0.1 --halving-factor 0.5 --min_iters 15 --randomize true --cache_size 50000 --bunch_size 200 --mlpOption " " --hid-dim 700 $lbldir/train $lbldir/dev $acdir/train $acdir/dev $dnndir
 
     if [ $TRAIN_DNN -eq 2 ]; then
         echo "exit after train dnn"
@@ -425,7 +417,7 @@ if [ $VOCODER_TEST -gt 0 ]; then
     mkdir -p exp_dnn/orig2/cmp exp_dnn/orig2/wav
     copy-feats scp:data/dev/feats.scp ark,t:- | awk -v dir=exp_dnn/orig2/cmp/ '($2 == "["){if (out) close(out); out=dir $1 ".cmp";}($2 != "["){if ($NF == "]") $NF=""; print $0 > out}'
     for cmp in exp_dnn/orig2/cmp/*.cmp; do
-      local/mlsa_synthesis_63_mlpg.sh --voice_thresh 0.5 --alpha $alpha --fftlen $fftlen --srate $srate --bndap_order $bndap_order --mcep_order $order $cmp exp_dnn/orig2/wav/`basename $cmp .cmp`.wav
+      utils/mlsa_synthesis_63_mlpg.sh --voice_thresh 0.5 --alpha $alpha --fftlen $fftlen --srate $srate --bndap_order $bndap_order --mcep_order $order $cmp exp_dnn/orig2/wav/`basename $cmp .cmp`.wav
     done
 fi
 

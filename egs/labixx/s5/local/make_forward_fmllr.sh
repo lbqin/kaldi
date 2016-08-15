@@ -26,9 +26,10 @@ if [ -e $exp/cmvn_glob.ark ]; then
     infeats_tst="$infeats_tst apply-cmvn --print-args=false --norm-vars=true $exp/cmvn_glob.ark ark:- ark:- |"
 fi
 if [ -e $exp/reverse_final.feature_transform ]; then
+    cat $exp/final.feature_transform | local/convert_transform.sh > $out/reverse_final.feature_transform
     feat_transf=$exp/reverse_final.feature_transform
 else
-    cat $exp/final.feature_transform | convert_transform.sh > $out/reverse_final.feature_transform
+    cat $exp/final.feature_transform | local/convert_transform.sh > $out/reverse_final.feature_transform
     feat_transf=$out/reverse_final.feature_transform
 fi
 postproc="ark,t:| cat "

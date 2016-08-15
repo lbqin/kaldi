@@ -31,7 +31,7 @@ voice_thresh=0.8
 alpha=0.55
 fftlen=1024
 tmpdir=/tmp
-win=win
+win=local/win
 
 [ -f path.sh ] && . ./path.sh; 
 . parse_options.sh || exit 1;
