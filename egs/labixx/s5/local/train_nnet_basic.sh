@@ -67,20 +67,20 @@ echo "$0 $@"  # Print the command line for logging
 
 if [ "$use_gpu_id" == "" ]; then
 # assumes new format
-    gpu_option=--use-gpu=$use_gpu
-    gpu_option_off=--use-gpu=no
+  gpu_option=--use-gpu=$use_gpu
+  gpu_option_off=--use-gpu=no
 else
-    gpu_option=--use_gpu_id=$use_gpu_id
-    gpu_option_off=--use_gpu_id=-2
+  gpu_option=--use_gpu_id=$use_gpu_id
+  gpu_option_off=--use_gpu_id=-2
 fi
 
 
 if [ $# != 5 ]; then
-   echo "Usage: $0 <indata-train> <indata-dev> <outdata-train> <outdata-dev> <exp-dir>"
-   echo " e.g.: $0 data/train data/cv data/out data/out_cv exp/mono_nnet"
-   echo "main options (for others, see top of script file)"
-   echo "  --config <config-file>  # config containing options"
-   exit 1;
+  echo "Usage: $0 <indata-train> <indata-dev> <outdata-train> <outdata-dev> <exp-dir>"
+  echo " e.g.: $0 data/train data/cv data/out data/out_cv exp/mono_nnet"
+  echo "main options (for others, see top of script file)"
+  echo "  --config <config-file>  # config containing options"
+  exit 1;
 fi
 
 data=$1
@@ -89,12 +89,9 @@ data_cv=$2
 odata=$3
 odata_cv=$4
 dir=$5
-
 #silphonelist=`cat $lang/phones/silence.csl` || exit 1;
-
-
 for f in $data/feats.scp $data_cv/feats.scp $odata/feats.scp $odata_cv/feats.scp; do
-    [ ! -f $f ] && echo "$0: no such file $f" && exit 1;
+  [ ! -f $f ] && echo "$0: no such file $f" && exit 1;
 done
 
 echo "$0 [info]: Training Neural Network"
@@ -117,7 +114,6 @@ cat $odata/feats.scp |awk -v lst=$data/feats.scp 'BEGIN{ while (getline < lst) w
 cat $odata_cv/feats.scp | awk -v lst=$data_cv/feats.scp 'BEGIN{ while (getline < lst) w[$1] = 1}{if (w[$1]) print}' > $dir/cv.scp
 # print the list sizes
 wc -l $dir/train.scp $dir/cv.scp
-
 #re-save the shuffled features, so they are stored sequentially on the disk in /tmp/
 if [ "$copy_feats" == "true" ]; then
   tmpdir=$(mktemp -d); mv $dir/train.scp $dir/train.scp_non_local
@@ -131,44 +127,41 @@ fi
 #create a 10k utt subset for global cmvn estimates
 head -n 10000 $dir/train.scp > $dir/train.scp.10k
 
-
-
 ###### PREPARE FEATURE PIPELINE ######
-
 #read the features
 cat $dir/intrain.scp $dir/incv.scp > $dir/infull.scp
 if [ "$input_feature_transform" != "" ]; then
-    cp $input_feature_transform $dir/input_final.feature_transform
-    # Removed $gpu_option_off
-    infeats_tr="ark:nnet-forward $gpu_option $input_feature_transform scp:$dir/intrain.scp ark:- |"
-    infeats_cv="ark:nnet-forward $gpu_option $input_feature_transform scp:$dir/incv.scp ark:- |"
-    infeats_fl="ark:nnet-forward $gpu_option $input_feature_transform scp:$dir/infull.scp ark:- |"
+  cp $input_feature_transform $dir/input_final.feature_transform
+  # Removed $gpu_option_off
+  infeats_tr="ark:nnet-forward $gpu_option $input_feature_transform scp:$dir/intrain.scp ark:- |"
+  infeats_cv="ark:nnet-forward $gpu_option $input_feature_transform scp:$dir/incv.scp ark:- |"
+  infeats_fl="ark:nnet-forward $gpu_option $input_feature_transform scp:$dir/infull.scp ark:- |"
 else
-    infeats_tr="ark:copy-feats scp:$dir/intrain.scp ark:- |"
-    infeats_cv="ark:copy-feats scp:$dir/incv.scp ark:- |"
-    infeats_fl="ark:copy-feats scp:$dir/infull.scp ark:- |"
+  infeats_tr="ark:copy-feats scp:$dir/intrain.scp ark:- |"
+  infeats_cv="ark:copy-feats scp:$dir/incv.scp ark:- |"
+  infeats_fl="ark:copy-feats scp:$dir/infull.scp ark:- |"
 
-    # optionally add splicing
-    if [ "$insplice_lr" != "" ]; then
-	raw_in_dim=$(feat-to-dim "$infeats_tr" -);
-	echo "Using splice +/- $insplice_lr , step $insplice_step"
-	input_feature_transform2=$dir/intr_splice$insplice_lr-$insplice_step.nnet
-	local/nnet/gen_splice.py --fea-dim=$raw_in_dim --splice=$insplice_lr --splice-step=$insplice_step > $input_feature_transform2
-	cp $input_feature_transform2 $dir/input_final.feature_transform
+  # optionally add splicing
+  if [ "$insplice_lr" != "" ]; then
+    raw_in_dim=$(feat-to-dim "$infeats_tr" -);
+    echo "Using splice +/- $insplice_lr , step $insplice_step"
+    input_feature_transform2=$dir/intr_splice$insplice_lr-$insplice_step.nnet
+    local/nnet/gen_splice.py --fea-dim=$raw_in_dim --splice=$insplice_lr --splice-step=$insplice_step > $input_feature_transform2
+    cp $input_feature_transform2 $dir/input_final.feature_transform
     # Removed $gpu_option_off
-	infeats_tr="ark:nnet-forward $gpu_option $input_feature_transform2 scp:$dir/intrain.scp ark:- |"
-	infeats_cv="ark:nnet-forward $gpu_option $input_feature_transform2 scp:$dir/incv.scp ark:- |"
-	infeats_fl="ark:nnet-forward $gpu_option $input_feature_transform2 scp:$dir/infull.scp ark:- |"
-    fi
+    infeats_tr="ark:nnet-forward $gpu_option $input_feature_transform2 scp:$dir/intrain.scp ark:- |"
+    infeats_cv="ark:nnet-forward $gpu_option $input_feature_transform2 scp:$dir/incv.scp ark:- |"
+    infeats_fl="ark:nnet-forward $gpu_option $input_feature_transform2 scp:$dir/infull.scp ark:- |"
+  fi
 
-    #optionally add deltas to input
-    if [ "$indelta_order" != "" ]; then
-	infeats_tr="$infeats_tr add-deltas --delta-order=$indelta_order ark:- ark:- |"
-	infeats_cv="$infeats_cv add-deltas --delta-order=$indelta_order ark:- ark:- |"
-	infeats_fl="$infeats_fl add-deltas --delta-order=$indelta_order ark:- ark:- |"
-	echo "$indelta_order" > $dir/indelta_order
-	echo "add-deltas (delta_order $indelta_order)"
-    fi
+  #optionally add deltas to input
+  if [ "$indelta_order" != "" ]; then
+    infeats_tr="$infeats_tr add-deltas --delta-order=$indelta_order ark:- ark:- |"
+    infeats_cv="$infeats_cv add-deltas --delta-order=$indelta_order ark:- ark:- |"
+    infeats_fl="$infeats_fl add-deltas --delta-order=$indelta_order ark:- ark:- |"
+    echo "$indelta_order" > $dir/indelta_order
+    echo "add-deltas (delta_order $indelta_order)"
+  fi
 fi
 cat $dir/train.scp $dir/cv.scp > $dir/full.scp
 cat $odata/utt2spk $odata_cv/utt2spk > $dir/utt2spk
@@ -213,10 +206,10 @@ fi
 
 #optionally add fmllr transformations
 if [[ "$speak_transform" != "" && -f $speak_transform ]]; then
-   feats_tr="$feats_tr transform-feats --utt2spk=ark:$data/utt2spk ark:$speak_transform ark:- ark:- |"
-   feats_cv="$feats_cv transform-feats --utt2spk=ark:$data_cv/utt2spk ark:$speak_transform ark:- ark:- |"
-   feats_fl="$feats_fl transform-feats --utt2spk=ark:$dir/utt2spk ark:$speak_transform ark:- ark:- |"
-   echo "added fmllr from $speak_transform"
+  feats_tr="$feats_tr transform-feats --utt2spk=ark:$data/utt2spk ark:$speak_transform ark:- ark:- |"
+  feats_cv="$feats_cv transform-feats --utt2spk=ark:$data_cv/utt2spk ark:$speak_transform ark:- ark:- |"
+  feats_fl="$feats_fl transform-feats --utt2spk=ark:$dir/utt2spk ark:$speak_transform ark:- ark:- |"
+  echo "added fmllr from $speak_transform"
 fi
 
 #get feature dim
@@ -247,7 +240,7 @@ else
   echo "Feature type : $feat_type"
   case $feat_type in
     plain)
-    ;;
+      ;;
     traps)
       #generate hamming+dct transform
       transf=$dir/hamm_dct${traps_dct_basis}.mat
@@ -265,7 +258,7 @@ else
         cp $feature_transform_old $feature_transform
         cat $transf.nnet >> $feature_transform
       }
-    ;;
+      ;;
     transf)
       transf=$dir/final.mat
       [ ! -f $alidir/final.mat ] && echo "Missing transform $alidir/final.mat" && exit 1;
@@ -280,14 +273,14 @@ else
         cp $feature_transform_old $feature_transform
         cat $transf.nnet >> $feature_transform
       }
-    ;;
+      ;;
     lda)
       transf=$dir/lda$lda_dim.mat
       #get the LDA statistics
       if [ ! -r "$dir/lda.acc" ]; then
         echo "LDA: Converting alignments to posteriors $dir/lda_post.scp"
         ali-to-post "ark:gunzip -c $alidir/ali.*.gz|" ark:- | \
-          weight-silence-post 0.0 $silphonelist $alidir/final.mdl ark:- ark,scp:$dir/lda_post.ark,$dir/lda_post.scp 2> $dir/lda_post.scp_log || exit 1;
+        weight-silence-post 0.0 $silphonelist $alidir/final.mdl ark:- ark,scp:$dir/lda_post.ark,$dir/lda_post.scp 2> $dir/lda_post.scp_log || exit 1;
         echo "Accumulating LDA statistics $dir/lda.acc on top of spliced feats"
         acc-lda --rand-prune=$lda_rand_prune $alidir/final.mdl "$feats_tr nnet-forward $feature_transform ark:- ark:- |" scp:$dir/lda_post.scp $dir/lda.acc 2> $dir/lda.acc_log || exit 1;
       else
@@ -309,46 +302,46 @@ else
       #remove the accu
       #rm $dir/lda.acc 
       rm $dir/lda_post.{ark,scp}
-    ;;
+      ;;
     *)
       echo "Unknown feature type $feat_type"
       exit 1;
-    ;;
+      ;;
   esac
   # keep track of feat_type
   echo $feat_type > $dir/feat_type
 
 
   if [ "$apply_minmax" == "true" ]; then
-      feature_transform_old=$feature_transform
-      feature_transform=${feature_transform%.nnet}_minmax.nnet
-      echo "Renormalizing MLP output features using minmax into $feature_transform"
-      nnet-forward $gpu_option \
-	  $feature_transform_old "$(echo $feats_tr | sed 's|train.scp|train.scp.10k|')" \
-	  ark:- |\
-          compute-minmax-stats ark:- - 2>$dir/log/minmax_calculation.log | minmax-to-nnet - - |\
-          nnet-concat --binary=false $feature_transform_old - $feature_transform
+    feature_transform_old=$feature_transform
+    feature_transform=${feature_transform%.nnet}_minmax.nnet
+    echo "Renormalizing MLP output features using minmax into $feature_transform"
+    nnet-forward $gpu_option \
+      $feature_transform_old "$(echo $feats_tr | sed 's|train.scp|train.scp.10k|')" \
+      ark:- |\
+      compute-minmax-stats ark:- - 2>$dir/log/minmax_calculation.log | minmax-to-nnet - - |\
+      nnet-concat --binary=false $feature_transform_old - $feature_transform
   fi
   #renormalize the MLP output to zero mean and unit variance
   if [ "$apply_glob_cmvn" == "true" ]; then
-      #if [ "$apply_cmvn" == "true" ]; then
-      #  echo "Computing global cmvn on output from pre-speaker cmvn"
-      #  compute-cmvn-stats --binary=false  "$feats_tr_orig" $dir/cmvn_out_glob.ark
-      #fi
-      echo "Computing global cmvn on input"
-      compute-cmvn-stats --binary=false  "$infeats_fl" $dir/cmvn_glob.ark
+    #if [ "$apply_cmvn" == "true" ]; then
+    #  echo "Computing global cmvn on output from pre-speaker cmvn"
+    #  compute-cmvn-stats --binary=false  "$feats_tr_orig" $dir/cmvn_out_glob.ark
+    #fi
+    echo "Computing global cmvn on input"
+    compute-cmvn-stats --binary=false  "$infeats_fl" $dir/cmvn_glob.ark
   else
-      echo "No global CMVN used on MLP front/back-end"
+    echo "No global CMVN used on MLP front/back-end"
   fi
 fi
 
 if  [ "$apply_glob_cmvn" == "true" ]; then
-    # if an input feature transform is provided, we consider it takes care of the global cmvn
-    # on input
-    if [ -z "$input_feature_transform" ]; then 
-	infeats_tr="$infeats_tr apply-cmvn --print-args=false --norm-vars=$norm_vars $dir/cmvn_glob.ark ark:- ark:- |"
-	infeats_cv="$infeats_cv apply-cmvn --print-args=false --norm-vars=$norm_vars $dir/cmvn_glob.ark ark:- ark:- |"
-    fi
+  # if an input feature transform is provided, we consider it takes care of the global cmvn
+  # on input
+  if [ -z "$input_feature_transform" ]; then 
+    infeats_tr="$infeats_tr apply-cmvn --print-args=false --norm-vars=$norm_vars $dir/cmvn_glob.ark ark:- ark:- |"
+    infeats_cv="$infeats_cv apply-cmvn --print-args=false --norm-vars=$norm_vars $dir/cmvn_glob.ark ark:- ark:- |"
+  fi
 fi
 
 
@@ -370,9 +363,9 @@ else
   #else
   #num_in=$(feat-to-dim "$infeats_tr nnet-forward $input_feature_transform ark:- ark:- |" - )
       { #optionally take output dim of DBN
-	  [ ! -z $dbn ] && num_in=$(nnet-forward $dbn "$infeats_tr" ark:- | feat-to-dim ark:- -)
-	  [ -z "$num_in" ] && echo "Getting nnet input dimension failed!!" && exit 1
-      }
+      [ ! -z $dbn ] && num_in=$(nnet-forward $dbn "$infeats_tr" ark:- | feat-to-dim ark:- -)
+      [ -z "$num_in" ] && echo "Getting nnet input dimension failed!!" && exit 1
+    }
   #fi
 
   #output-dim
@@ -394,7 +387,6 @@ else
     nnet-concat $dbn $mlp_init_old $mlp_init 
   fi
 fi
-
 
 #if [ "" != "$mlp_init" ]; then
 #  echo "Using pre-initalized network $mlp_init";
@@ -498,8 +490,6 @@ fi
 #   fi
 
 # fi
-
-
 
 ###### TRAIN ######
 #feature_transform=
