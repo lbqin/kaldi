@@ -5,7 +5,7 @@ n=4
 thchs=/home/sooda/data/thchs30-openslr
 srate=16000
 FRAMESHIFT=0.005
-featdir=/home/sooda/features
+featdir=/home/sooda/data/features
 corpus_dir=/home/sooda/data/tts/labixx120
 test_dir=/home/sooda/data/tts/test
 #lang=data/lang
@@ -27,7 +27,7 @@ ALIGNMENT_PHONE=0
 GENERATE_LABLE=0
 GENERATE_STATE=0
 CONVERT_FEATURE=0
-TRAIN_DNN=0
+TRAIN_DNN=1
 PACKAGE_DNN=1
 VOCODER_TEST=0
 spk="lbx"
@@ -96,7 +96,7 @@ if [ $EXTRACT_FEAT -gt 0 ]; then
     for step in train dev; do
         rm -f data/$step/feats.scp
         # Generate f0 features
-        steps/make_pitch.sh --pitch-config conf/pitch.conf data/$step exp/make_pitch/$step   $featdir;
+        local/make_pitch.sh --pitch-config conf/pitch.conf data/$step exp/make_pitch/$step   $featdir;
         cp data/$step/pitch_feats.scp data/$step/feats.scp
         # Compute CMVN on pitch features, to estimate min_f0 (set as mean_f0 - 2*std_F0)
         steps/compute_cmvn_stats.sh data/$step exp/compute_cmvn_pitch/$step $featdir;
@@ -115,12 +115,12 @@ if [ $EXTRACT_FEAT -gt 0 ]; then
         subset_data_dir.sh --spk $spk data/$step 100000 data/${step}_$spk
         #cp data/$step/pitch_feats.scp data/${step}_$spk/
         # Regenerate pitch with more appropriate window
-        steps/make_pitch.sh --pitch-config conf/pitch.conf --frame_length $f0flen data/${step}_$spk exp/make_pitch/${step}_$spk  $featdir;
+        local/make_pitch.sh --pitch-config conf/pitch.conf --frame_length $f0flen data/${step}_$spk exp/make_pitch/${step}_$spk  $featdir;
         # Generate Band Aperiodicity feature
-        steps/make_bndap.sh --bndap-config conf/bndap.conf --frame_length $bndapflen data/${step}_$spk exp/make_bndap/${step}_$spk  $featdir
+        local/make_bndap.sh --bndap-config conf/bndap.conf --frame_length $bndapflen data/${step}_$spk exp/make_bndap/${step}_$spk  $featdir
         # Generate Mel Cepstral features
         #steps/make_mcep.sh  --sample-frequency $srate --frame_length $mcepflen  data/${step}_$spk exp/make_mcep/${step}_$spk   $featdir	
-        steps/make_mcep.sh --sample-frequency $srate data/${step}_$spk exp/make_mcep/${step}_$spk   $featdir	
+        local/make_mcep.sh --sample-frequency $srate data/${step}_$spk exp/make_mcep/${step}_$spk   $featdir	
         # Merge features
         cat data/${step}_*/bndap_feats.scp > data/$step/bndap_feats.scp
         cat data/${step}_*/mcep_feats.scp > data/$step/mcep_feats.scp
