@@ -1,13 +1,15 @@
 source cmd.sh
 source path.sh
 H=`pwd`  #exp home
-n=4
+n=1
 thchs=/home/sooda/data/thchs30-openslr
 srate=16000
 FRAMESHIFT=0.005
-featdir=/home/sooda/data/features
-corpus_dir=/home/sooda/data/tts/labixx120
-test_dir=/home/sooda/data/tts/test
+featdir=/home/sooda/data/features/
+corpus_dir=/home/sooda/data/tts/labixx120/
+test_dir=/home/sooda/data/tts/test/
+cppmary_base=/home/sooda/speech/cppmary/
+cppmary_bin=$cppmary_base/build/
 #lang=data/lang
 #dict=data/dict
 expa=exp-align
@@ -20,13 +22,14 @@ expdurdir=$exp/tts_dnn_dur_3_delta_quin5
 dnndir=$exp/tts_dnn_train_3_deltasc2_quin5
 #config
 #0 not run; 1 run; 2 run and exit
-DATA_PREP_MARY=0
-LANG_PREP_PHONE64=0
+DATA_PREP_MARY=1
+LANG_PREP_PHONE64=1
 EXTRACT_FEAT=0
-ALIGNMENT_PHONE=0
-GENERATE_LABLE=0
-GENERATE_STATE=0
-CONVERT_FEATURE=0
+ALIGNMENT_PHONE=2
+GENERATE_LABLE=1
+GENERATE_STATE=2
+EXTRACT_TXT_FEATURE=0
+CONVERT_FEATURE=1
 TRAIN_DNN=1
 PACKAGE_DNN=1
 VOCODER_TEST=0
@@ -35,6 +38,7 @@ audio_dir=$corpus_dir/wav
 prompt_lab=prompt_labels
 state_lab=states
 lab=labels
+textfeat=$corpus_dir/ali
 acdir=data
 lbldir=lbldata
 durdir=durdata
@@ -58,10 +62,16 @@ if [ $DATA_PREP_MARY -gt 0 ]; then
 
     find $audio_dir -iname "$dev_pat".wav | sort | $makeid | awk -v audiodir=$audio_dir '{line=$1" "audiodir"/"$1".wav"; print line}' >> data/dev/wav.scp
 
+    #generate alignment transcript with cppmary: phones.txt
+    cd $cppmary_base
+    $cppmary_bin/genTrainPhones "data/labixx.conf" $corpus_dir
+    cd $H
+
     grep "$train_rgx" $corpus_dir/phones.txt | sort >> data/train/text
     grep "$dev_rgx" $corpus_dir/phones.txt | sort >> data/dev/text
 
     for x in train dev; do
+        #cat data/$x/wav.scp | awk -v spk=$spk '{na = split($1, a, "_"); printf "%s %s\n", $1, a[na]}' >> data/$x/utt2spk #one uttrance one speaker for parallel
         cat data/$x/wav.scp | awk -v spk=$spk '{print $1, spk}' >> data/$x/utt2spk
         utils/utt2spk_to_spk2utt.pl data/$x/utt2spk > data/$x/spk2utt
     done
@@ -96,7 +106,7 @@ if [ $EXTRACT_FEAT -gt 0 ]; then
     for step in train dev; do
         rm -f data/$step/feats.scp
         # Generate f0 features
-        local/make_pitch.sh --pitch-config conf/pitch.conf data/$step exp/make_pitch/$step   $featdir;
+        local/make_pitch.sh --pitch-config conf/pitch.conf data/$step exp/make_pitch/$step $featdir;
         cp data/$step/pitch_feats.scp data/$step/feats.scp
         # Compute CMVN on pitch features, to estimate min_f0 (set as mean_f0 - 2*std_F0)
         steps/compute_cmvn_stats.sh data/$step exp/compute_cmvn_pitch/$step $featdir;
@@ -111,23 +121,19 @@ if [ $EXTRACT_FEAT -gt 0 ]; then
         bndapflen=`awk -v f0=$min_f0 'BEGIN{printf "%d", 4.6 * 1000.0 / f0 + 0.5}'`
         mcepflen=`awk -v f0=$min_f0 'BEGIN{printf "%d", 2.3 * 1000.0 / f0 + 0.5}'`
         f0flen=`awk -v f0=$min_f0 'BEGIN{printf "%d", 2.3 * 1000.0 / f0 + 0.5}'`
-        echo "using wsizes: $bndapflen $mcepflen"
-        subset_data_dir.sh --spk $spk data/$step 100000 data/${step}_$spk
-        #cp data/$step/pitch_feats.scp data/${step}_$spk/
+        echo "using wsizes: $f0flen $bndapflen $mcepflen"
         # Regenerate pitch with more appropriate window
-        local/make_pitch.sh --pitch-config conf/pitch.conf --frame_length $f0flen data/${step}_$spk exp/make_pitch/${step}_$spk  $featdir;
+        local/make_pitch.sh --pitch-config conf/pitch.conf --frame_length $f0flen data/$step exp/make_pitch/$step $featdir;
         # Generate Band Aperiodicity feature
-        local/make_bndap.sh --bndap-config conf/bndap.conf --frame_length $bndapflen data/${step}_$spk exp/make_bndap/${step}_$spk  $featdir
+        local/make_bndap.sh --bndap-config conf/bndap.conf --frame_length $bndapflen data/$step exp/make_bndap/$step $featdir
         # Generate Mel Cepstral features
         #steps/make_mcep.sh  --sample-frequency $srate --frame_length $mcepflen  data/${step}_$spk exp/make_mcep/${step}_$spk   $featdir	
-        local/make_mcep.sh --sample-frequency $srate data/${step}_$spk exp/make_mcep/${step}_$spk   $featdir	
+        local/make_mcep.sh --sample-frequency $srate data/$step exp/make_mcep/$step $featdir
         # Merge features
-        cat data/${step}_*/bndap_feats.scp > data/$step/bndap_feats.scp
-        cat data/${step}_*/mcep_feats.scp > data/$step/mcep_feats.scp
         # Have to set the length tolerance to 1, as mcep files are a bit longer than the others for some reason
         paste-feats --length-tolerance=1 scp:data/$step/pitch_feats.scp scp:data/$step/mcep_feats.scp scp:data/$step/bndap_feats.scp ark,scp:$featdir/${step}_cmp_feats.ark,data/$step/feats.scp
         # Compute CMVN on whole feature set
-        steps/compute_cmvn_stats.sh data/$step exp/compute_cmvn/$step   data/$step
+        steps/compute_cmvn_stats.sh data/$step exp/compute_cmvn/$step data/$step
     done
 
     if [ $EXTRACT_FEAT -eq 2 ]; then
@@ -153,20 +159,20 @@ if [ $ALIGNMENT_PHONE -gt 0 ]; then
     done
     # Now running the normal kaldi recipe for forced alignment
     test=data/eval_mfcc
-    steps/train_mono.sh --boost-silence 0.25 --nj 1 --cmd "$train_cmd" \
+    steps/train_mono.sh --boost-silence 0.25 --nj $n --cmd "$train_cmd" \
                   $train $lang $expa/mono
-    steps/align_si.sh --boost-silence 0.25 --nj 1 --cmd "$train_cmd" \
+    steps/align_si.sh --boost-silence 0.25 --nj $n --cmd "$train_cmd" \
                 $train $lang $expa/mono $expa/mono_ali
     steps/train_deltas.sh  --boost-silence 0.25 --cmd "$train_cmd" \
                  500 5000 $train $lang $expa/mono_ali $expa/tri1
 
-    steps/align_si.sh  --nj 1 --cmd "$train_cmd" \
+    steps/align_si.sh  --nj $n --cmd "$train_cmd" \
                 $train $lang $expa/tri1 $expa/tri1_ali
     steps/train_deltas.sh --cmd "$train_cmd" \
                  500 5000 $train $lang $expa/tri1_ali $expa/tri2
 
     # Create alignments
-    steps/align_si.sh  --nj 1 --cmd "$train_cmd" \
+    steps/align_si.sh  --nj $n --cmd "$train_cmd" \
         $train $lang $expa/tri2 $expa/tri2_ali_full
 
     steps/train_deltas.sh --cmd "$train_cmd" \
@@ -174,7 +180,7 @@ if [ $ALIGNMENT_PHONE -gt 0 ]; then
         500 5000 $train $lang $expa/tri2_ali_full $expa/quin
 
     # Create alignments
-    steps/align_si.sh  --nj 1 --cmd "$train_cmd" \
+    steps/align_si.sh  --nj $n --cmd "$train_cmd" \
       $train $lang $expa/quin $expa/quin_ali_full
 
     ali=$expa/quin_ali_full
@@ -258,10 +264,20 @@ if [ $GENERATE_STATE -gt 0 ]; then
 fi
 
 
+if [ $EXTRACT_TXT_FEATURE -gt 0 ]; then
+    cd $cppmary_base
+    $cppmary_bin/genTextFeatureWithLab "data/labixx.conf" $corpus_dir $H/$lab/
+    cd $H
+    if [ $EXTRACT_TXT_FEATURE -eq 2 ]; then
+        echo "exit after text feature"
+        exit
+    fi
+fi
+
 
 if [ $CONVERT_FEATURE -gt 0 ]; then
     step=full
-    cat $corpus_dir/ali \
+    cat $textfeat \
     | awk '{print $1, "["; $1=""; na = split($0, a, ";"); for (i = 1; i < na; i++) print a[i]; print "]"}' \
     | copy-feats ark:- ark,t,scp:$featdir/in_feats_$step.ark,$featdir/in_feats_$step.scp
 
@@ -432,13 +448,18 @@ END{for (i = 1; i <= nv; i++) print mean[i], var[i]}' \
 > data/train/var_cmp.txt
 
 echo "  ###  5b: labixx samples synthesis ###"
-# Alice test set
 mkdir -p data/eval
 
-# Generate CEX features for test set.
+durIn=$test_dir/durali
+
+cd $cppmary_base
+$cppmary_bin/genDnnInFeat "data/labixx.conf" $test_dir $durin
+cd $H
+
+
 for step in eval; do
   # Generate input feature for duration modelling
-  cat $test_dir/durali \
+  cat $durIn \
   | awk '{print $1, "["; $1=""; na = split($0, a, ";"); for (i = 1; i < na; i++) for (state = 0; state < 5; state++) print a[i], state; print "]"}' \
   | copy-feats ark:- ark,scp:$featdir/in_durfeats_$step.ark,$featdir/in_durfeats_$step.scp
 done
@@ -513,9 +534,17 @@ for cmp in $expdurdir/tst_forward/cmp/*.cmp; do
   }'
 done
 
+dnnIn=$test_dir/dnnali
+
+#call cppmary to generate dnnInput
+cd $cppmary_base
+$cppmary_bin/genDurInFeat "data/labixx.conf" $test_dir $testAlignDir $dnnIn
+cd $H
+
+
 # 3. Turn them into DNN input labels (i.e. one sample per frame)
 for step in eval; do
-    cat $test_dir/dnnali \
+    cat $dnnIn \
     | awk '{print $1, "["; $1=""; na = split($0, a, ";"); for (i = 1; i < na; i++) print a[i]; print "]"}' \
     | copy-feats ark:- ark,t,scp:$featdir/in_feats_$step.ark,$featdir/in_feats_$step.scp
 done
