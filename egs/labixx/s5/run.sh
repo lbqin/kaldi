@@ -22,15 +22,15 @@ expdurdir=$exp/tts_dnn_dur_3_delta_quin5
 dnndir=$exp/tts_dnn_train_3_deltasc2_quin5
 #config
 #0 not run; 1 run; 2 run and exit
-DATA_PREP_MARY=0
-LANG_PREP_PHONE64=0
-EXTRACT_FEAT=0
-ALIGNMENT_PHONE=0
-GENERATE_LABLE=0
-GENERATE_STATE=0
-EXTRACT_TXT_FEATURE=0
-CONVERT_FEATURE=0
-TRAIN_DNN=0
+DATA_PREP_MARY=1
+LANG_PREP_PHONE64=1
+EXTRACT_FEAT=1
+ALIGNMENT_PHONE=1
+GENERATE_LABLE=1
+GENERATE_STATE=1
+EXTRACT_TXT_FEATURE=1
+CONVERT_FEATURE=1
+TRAIN_DNN=1
 PACKAGE_DNN=1
 VOCODER_TEST=0
 spk="lbx"
@@ -47,38 +47,24 @@ lbldurdir=lbldurdata
 echo "##### Step 0: data preparation #####"
 if [ $DATA_PREP_MARY -gt 0 ]; then
     rm -rf data/{train,dev,full}
-    #rm -rf data/*
-    mkdir -p data/{train,dev}
-    mkdir -p data/full
-
-    dev_pat='hs_zh_arctic_lbx_00??3'
-    dev_rgx='hs_zh_arctic_lbx_00..3'
-    train_pat='hs_zh_arctic_lbx_?????'
-    train_rgx='hs_zh_arctic_lbx_.....'
+    mkdir -p data/{train,dev,full}
 
     makeid="xargs -i basename {} .wav"
 
-    find $audio_dir -iname "$train_pat".wav | sort | $makeid | awk -v audiodir=$audio_dir '{line=$1" "audiodir"/"$1".wav"; print line}' >> data/train/wav.scp
-
-    find $audio_dir -iname "$dev_pat".wav | sort | $makeid | awk -v audiodir=$audio_dir '{line=$1" "audiodir"/"$1".wav"; print line}' >> data/dev/wav.scp
+    find $audio_dir -name "*.wav" | sort | $makeid | awk -v audiodir=$audio_dir '{line=$1" "audiodir"/"$1".wav"; print line}' >> data/full/wav.scp
 
     #generate alignment transcript with cppmary: phones.txt
     cd $cppmary_base
     $cppmary_bin/genTrainPhones "data/labixx.conf" $corpus_dir
     cd $H
 
-    grep "$train_rgx" $corpus_dir/phones.txt | sort >> data/train/text
-    grep "$dev_rgx" $corpus_dir/phones.txt | sort >> data/dev/text
+    cat $corpus_dir/phones.txt | sort > data/full/text
+    #cat data/$x/wav.scp | awk -v spk=$spk '{na = split($1, a, "_"); printf "%s %s\n", $1, a[na]}' >> data/$x/utt2spk #one uttrance one speaker for parallel
+    cat data/full/wav.scp | awk -v spk=$spk '{print $1, spk}' >> data/full/utt2spk
+    utils/utt2spk_to_spk2utt.pl data/full/utt2spk > data/full/spk2utt
 
-    for x in train dev; do
-        #cat data/$x/wav.scp | awk -v spk=$spk '{na = split($1, a, "_"); printf "%s %s\n", $1, a[na]}' >> data/$x/utt2spk #one uttrance one speaker for parallel
-        cat data/$x/wav.scp | awk -v spk=$spk '{print $1, spk}' >> data/$x/utt2spk
-        utils/utt2spk_to_spk2utt.pl data/$x/utt2spk > data/$x/spk2utt
-    done
-    cat data/train/utt2spk data/dev/utt2spk | sort -u  > data/full/utt2spk
-    cat data/train/text data/dev/text | sort -u > data/full/text
-    cat data/train/wav.scp data/dev/wav.scp | sort -u > data/full/wav.scp
-    utils/utt2spk_to_spk2utt.pl data/full/utt2spk | sort -u > data/full/spk2utt
+    utils/subset_data_dir_tr_cv.sh data/full data/train data/dev 
+
     if [ $DATA_PREP_MARY -eq 2 ]; then
         echo "exit in data prepare"
         exit
