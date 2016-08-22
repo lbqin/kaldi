@@ -1,12 +1,12 @@
 source cmd.sh
 source path.sh
 H=`pwd`  #exp home
-n=1
+n=8
 thchs=/home/sooda/data/thchs30-openslr
 srate=16000
 FRAMESHIFT=0.005
 featdir=/home/sooda/data/features/
-corpus_dir=/home/sooda/data/tts/labixx120/
+corpus_dir=/home/sooda/data/tts/labixx1000/
 test_dir=/home/sooda/data/tts/test/
 cppmary_base=/home/sooda/speech/cppmary/
 cppmary_bin=$cppmary_base/build/
@@ -47,6 +47,8 @@ lbldurdir=lbldurdata
 echo "##### Step 0: data preparation #####"
 if [ $DATA_PREP_MARY -gt 0 ]; then
     rm -rf data/{train,dev,full}
+    rm -rf exp exp_align
+    rm -rf $featdir
     mkdir -p data/{train,dev,full}
 
     makeid="xargs -i basename {} .wav"
@@ -88,7 +90,6 @@ fi
 echo "##### Step 1: acoustic data generation #####"
 
 if [ $EXTRACT_FEAT -gt 0 ]; then
-
     for step in train dev; do
         rm -f data/$step/feats.scp
         # Generate f0 features
@@ -108,10 +109,10 @@ if [ $EXTRACT_FEAT -gt 0 ]; then
         mcepflen=`awk -v f0=$min_f0 'BEGIN{printf "%d", 2.3 * 1000.0 / f0 + 0.5}'`
         f0flen=`awk -v f0=$min_f0 'BEGIN{printf "%d", 2.3 * 1000.0 / f0 + 0.5}'`
         echo "using wsizes: $f0flen $bndapflen $mcepflen"
-        # Regenerate pitch with more appropriate window
-        local/make_pitch.sh --pitch-config conf/pitch.conf --frame_length $f0flen data/$step exp/make_pitch/$step $featdir;
         # Generate Band Aperiodicity feature
         local/make_bndap.sh --bndap-config conf/bndap.conf --frame_length $bndapflen data/$step exp/make_bndap/$step $featdir
+        # Regenerate pitch with more appropriate window
+        local/make_pitch.sh --pitch-config conf/pitch.conf --frame_length $f0flen data/$step exp/make_pitch/$step $featdir;
         # Generate Mel Cepstral features
         #steps/make_mcep.sh  --sample-frequency $srate --frame_length $mcepflen  data/${step}_$spk exp/make_mcep/${step}_$spk   $featdir	
         local/make_mcep.sh --sample-frequency $srate data/$step exp/make_mcep/$step $featdir
@@ -138,7 +139,6 @@ utils/fix_data_dir.sh data/full
 utils/validate_lang.pl $lang
 
 if [ $ALIGNMENT_PHONE -gt 0 ]; then
-    rm -rf exp exp-align
     for step in full; do
       steps/make_mfcc.sh data/$step exp/make_mfcc/$step $featdir
       steps/compute_cmvn_stats.sh data/$step exp/make_mfcc/$step $featdir
