@@ -5,6 +5,8 @@ export tooldir=$KALDI_ROOT/tools/SPTK/bin
 
 help_message="Usage: ./compute-lf0-feats.sh [options] scp:<in.scp> <wspecifier>\n\tcf. top of file for list of options."
 
+tmpdir=/tmp
+
 AWK=gawk
 PERL=/usr/bin/perl
 BC=/usr/bin/bc
@@ -59,15 +61,15 @@ fi
 for i in `awk -v lst="$1" 'BEGIN{if (lst ~ /^scp/) sub("[^:]+:[[:space:]]*","", lst); while (getline < lst) print $1 "___" $2}'`; do
     name=${i%%___*}
     wfilename=${i##*___}
-    raw=$wfilename.raw
+    raw=$tmpdir/temp$job.raw
     sox $wfilename $raw
     count=`echo "0.005 * $SAMPFREQ" | $BC -l`; 
-    $STEP -l `printf "%.0f" $count` -v 0.0 | $X2X +fs > tmp$job.head; 
+    $STEP -l `printf "%.0f" $count` -v 0.0 | $X2X +fs > $tmpdir/lf0$job.head; 
     count=`echo "0.025 * $SAMPFREQ" | $BC -l`; 
-    $STEP -l `printf "%.0f" $count` -v 0.0 | $X2X +fs > tmp$job.tail;
-    cat tmp$job.head $raw tmp$job.tail | $X2X +sf > tmp$job; 
-    leng=`$X2X +fa tmp$job | $WC -l`; 
-    $NRAND -l $leng | $SOPR -m $NOISEMASK | $VOPR -a tmp$job | $X2X +fs > tmp$job.raw;
-    $TCLSH local/scripts/getf0.tcl -l -lf0 -H $UPPERF0 -L $LOWERF0 -p $FRAMESHIFT -r $SAMPFREQ tmp$job.raw | \
+    $STEP -l `printf "%.0f" $count` -v 0.0 | $X2X +fs > $tmpdir/lf0$job.tail;
+    cat $tmpdir/lf0$job.head $raw lf0$job.tail | $X2X +sf > $tmpdir/lf0$job; 
+    leng=`$X2X +fa $tmpdir/lf0$job | $WC -l`; 
+    $NRAND -l $leng | $SOPR -m $NOISEMASK | $VOPR -a $tmpdir/lf0$job | $X2X +fs > $tmpdir/lf0$job.raw;
+    $TCLSH local/scripts/getf0.tcl -l -lf0 -H $UPPERF0 -L $LOWERF0 -p $FRAMESHIFT -r $SAMPFREQ $tmpdir/lf0$job.raw | \
     awk -v name=$name 'BEGIN{print name, "[";} {print} END{print "]"}'
 done | copy-feats ark:- "$2"

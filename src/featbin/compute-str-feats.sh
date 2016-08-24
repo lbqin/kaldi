@@ -5,7 +5,8 @@ export tooldir=$KALDI_ROOT/tools/SPTK/bin
 
 help_message="Usage: ./compute-str-feats.sh [options] scp:<in.scp> <wspecifier>\n\tcf. top of file for list of options."
 
-STRFILTERNAME=filters/mix_excitation_5filters_199taps_48Kz.txt
+STRFILTERNAME=local/filters/mix_excitation_5filters_199taps_48Kz.txt
+tmpdir=/tmp
 
 AWK=gawk
 PERL=/usr/bin/perl
@@ -62,14 +63,14 @@ fi
 for i in `awk -v lst="$1" 'BEGIN{if (lst ~ /^scp/) sub("[^:]+:[[:space:]]*","", lst); while (getline < lst) print $1 "___" $2}'`; do
     name=${i%%___*}
     wfilename=${i##*___}
-    raw=$wfilename.raw
+    raw=$tmpdir/str$job.raw
     sox $wfilename $raw
     count=`echo "0.005 * $SAMPFREQ" | $BC -l`;
-    $STEP -l `printf "%.0f" $count` | $X2X +fs > tmp$job.head;
+    $STEP -l `printf "%.0f" $count` | $X2X +fs > $tmpdir/str$job.head;
     count=`echo "0.025 * $SAMPFREQ" | $BC -l`;
-    $STEP -l `printf "%.0f" $count` | $X2X +fs > tmp$job.tail;
-    cat tmp$job.head $raw tmp$job.tail > tmp$job;
-    $TCLSH local/scripts/get_str.tcl -l -H $UPPERF0 -L $LOWERF0 -p $FRAMESHIFT -r $SAMPFREQ -f $STRFILTERNAME -n $STRORDER tmp$job | \
+    $STEP -l `printf "%.0f" $count` | $X2X +fs > $tmpdir/str$job.tail;
+    cat $tmpdir/str$job.head $raw $tmpdir/str$job.tail > $tmpdir/str$job;
+    $TCLSH local/scripts/get_str.tcl -l -H $UPPERF0 -L $LOWERF0 -p $FRAMESHIFT -r $SAMPFREQ -f $STRFILTERNAME -n $STRORDER $tmpdir/str$job | \
     $X2X +af | $X2X +f +a$STRORDER | \
     awk -v name=$name 'BEGIN{print name, "[";} {print} END{print "]"}'
 done | copy-feats ark:- "$2"
