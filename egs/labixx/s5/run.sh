@@ -6,7 +6,7 @@ thchs=/home/sooda/data/thchs30-openslr
 srate=16000
 FRAMESHIFT=0.005
 featdir=/home/sooda/data/features/
-corpus_dir=/home/sooda/data/tts/labixx1000/
+corpus_dir=/home/sooda/data/tts/labixx120_44k/
 test_dir=/home/sooda/data/tts/test/
 cppmary_base=/home/sooda/speech/cppmary/
 cppmary_bin=$cppmary_base/build/
@@ -24,14 +24,15 @@ dnndir=$exp/tts_dnn_train_3_deltasc2_quin5
 #0 not run; 1 run; 2 run and exit
 DATA_PREP_MARY=1
 LANG_PREP_PHONE64=1
-EXTRACT_FEAT=1
-ALIGNMENT_PHONE=1
-GENERATE_LABLE=1
-GENERATE_STATE=1
-EXTRACT_TXT_FEATURE=1
-CONVERT_FEATURE=1
-TRAIN_DNN=1
-PACKAGE_DNN=1
+EXTRACT_FEAT=0
+EXTRACT_FEAT_MARY=2
+ALIGNMENT_PHONE=0
+GENERATE_LABLE=0
+GENERATE_STATE=0
+EXTRACT_TXT_FEATURE=0
+CONVERT_FEATURE=0
+TRAIN_DNN=0
+PACKAGE_DNN=0
 VOCODER_TEST=0
 spk="lbx"
 audio_dir=$corpus_dir/wav 
@@ -125,6 +126,22 @@ if [ $EXTRACT_FEAT -gt 0 ]; then
 
     if [ $EXTRACT_FEAT -eq 2 ]; then
         echo "exit in extract feature"
+        exit
+    fi
+fi
+
+if [ $EXTRACT_FEAT_MARY -gt 0 ]; then
+    for step in train dev; do
+        local/make_lf0.sh data/$step exp/make_lf0/$step $featdir
+        local/make_mgc.sh data/$step exp/make_mgc/$step $featdir
+        local/make_str.sh data/$step exp/make_str/$step $featdir
+        # Have to set the length tolerance to 1, as mcep files are a bit longer than the others for some reason
+        paste-feats --length-tolerance=1 scp:data/$step/lf0_feats.scp scp:data/$step/mgc_feats.scp scp:data/$step/str_feats.scp ark,scp:$featdir/${step}_cmp_feats.ark,data/$step/feats.scp
+        steps/compute_cmvn_stats.sh data/$step exp/compute_cmvn/$step data/$step
+    done
+
+    if [ $EXTRACT_FEAT_MARY -eq 2 ]; then
+        echo "done and exit in extract mary feature"
         exit
     fi
 fi
