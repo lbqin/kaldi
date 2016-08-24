@@ -4,7 +4,7 @@
 # Apache 2.0
 
 # Begin configuration section.
-nj=4
+nj=8
 cmd=run.pl
 compress=false
 # End configuration section.

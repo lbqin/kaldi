@@ -6,10 +6,11 @@ thchs=/home/sooda/data/thchs30-openslr
 srate=16000
 FRAMESHIFT=0.005
 featdir=/home/sooda/data/features/
-corpus_dir=/home/sooda/data/tts/labixx120_44k/
+corpus_dir=/home/sooda/data/tts/labixx1000_44k/
 test_dir=/home/sooda/data/tts/test/
 cppmary_base=/home/sooda/speech/cppmary/
 cppmary_bin=$cppmary_base/build/
+mix_mlsa=$cppmary_bin/mlsaSynWithFilenames
 #lang=data/lang
 #dict=data/dict
 expa=exp-align
@@ -25,15 +26,15 @@ dnndir=$exp/tts_dnn_train_3_deltasc2_quin5
 DATA_PREP_MARY=1
 LANG_PREP_PHONE64=1
 EXTRACT_FEAT=0
-EXTRACT_FEAT_MARY=2
-ALIGNMENT_PHONE=0
-GENERATE_LABLE=0
-GENERATE_STATE=0
-EXTRACT_TXT_FEATURE=0
-CONVERT_FEATURE=0
-TRAIN_DNN=0
-PACKAGE_DNN=0
-VOCODER_TEST=0
+EXTRACT_FEAT_MARY=1
+ALIGNMENT_PHONE=1
+GENERATE_LABLE=1
+GENERATE_STATE=1
+EXTRACT_TXT_FEATURE=1
+CONVERT_FEATURE=1
+TRAIN_DNN=1
+PACKAGE_DNN=1
+VOCODER_TEST=1
 spk="lbx"
 audio_dir=$corpus_dir/wav 
 prompt_lab=prompt_labels
@@ -136,7 +137,7 @@ if [ $EXTRACT_FEAT_MARY -gt 0 ]; then
         local/make_mgc.sh data/$step exp/make_mgc/$step $featdir
         local/make_str.sh data/$step exp/make_str/$step $featdir
         # Have to set the length tolerance to 1, as mcep files are a bit longer than the others for some reason
-        paste-feats --length-tolerance=1 scp:data/$step/lf0_feats.scp scp:data/$step/mgc_feats.scp scp:data/$step/str_feats.scp ark,scp:$featdir/${step}_cmp_feats.ark,data/$step/feats.scp
+        paste-feats --length-tolerance=6 scp:data/$step/lf0_feats.scp scp:data/$step/mgc_feats.scp scp:data/$step/str_feats.scp ark,scp:$featdir/${step}_cmp_feats.ark,data/$step/feats.scp
         steps/compute_cmvn_stats.sh data/$step exp/compute_cmvn/$step data/$step
     done
 
@@ -436,8 +437,12 @@ if [ $VOCODER_TEST -gt 0 ]; then
     mkdir -p exp_dnn/orig2/cmp exp_dnn/orig2/wav
     copy-feats scp:data/dev/feats.scp ark,t:- | awk -v dir=exp_dnn/orig2/cmp/ '($2 == "["){if (out) close(out); out=dir $1 ".cmp";}($2 != "["){if ($NF == "]") $NF=""; print $0 > out}'
     for cmp in exp_dnn/orig2/cmp/*.cmp; do
-      utils/mlsa_synthesis_63_mlpg.sh --voice_thresh 0.5 --alpha $alpha --fftlen $fftlen --srate $srate --bndap_order $bndap_order --mcep_order $order $cmp exp_dnn/orig2/wav/`basename $cmp .cmp`.wav
+      local/mix_excitation_mlsa_mlpg.sh --syn_cmd $mix_mlsa --filter_file $cppmary_base/data/mix_excitation_5filters_199taps_48Kz.txt $cmp exp_dnn/orig2/wav/`basename $cmp .cmp`.wav
     done
+    if [ $VOCODER_TEST -eq 2 ]; then
+        echo "exit vocoder test"
+        exit
+    fi
 fi
 
 # Variant with mlpg: requires mean / variance from coefficients
@@ -462,9 +467,7 @@ cd $H
 
 for step in eval; do
   # Generate input feature for duration modelling
-  cat $durIn \
-  | awk '{print $1, "["; $1=""; na = split($0, a, ";"); for (i = 1; i < na; i++) for (state = 0; state < 5; state++) print a[i], state; print "]"}' \
-  | copy-feats ark:- ark,scp:$featdir/in_durfeats_$step.ark,$featdir/in_durfeats_$step.scp
+  cat $durIn | awk '{print $1, "["; $1=""; na = split($0, a, ";"); for (i = 1; i < na; i++) for (state = 0; state < 5; state++) print a[i], state; print "]"}' | copy-feats ark:- ark,scp:$featdir/in_durfeats_$step.ark,$featdir/in_durfeats_$step.scp
 done
 
 # Duration based test set
@@ -563,9 +566,10 @@ done
 local/make_forward_fmllr.sh $dnndir $lbldir/eval $dnndir/tst_forward/ ""
 
 # 5. Vocoding
-# NB: these are the settings for 16k
-mkdir -p $dnndir/tst_forward/wav_mlpg/; for cmp in $dnndir/tst_forward/cmp/*.cmp; do
-  local/mlsa_synthesis_63_mlpg.sh --voice_thresh 0.5 --alpha $alpha --fftlen $fftlen --srate $srate --bndap_order $bndap_order --mcep_order $order --delta_order 2 $cmp $dnndir/tst_forward/wav_mlpg/`basename $cmp .cmp`.wav data/train/var_cmp.txt
+mkdir -p $dnndir/tst_forward/wav_mlpg/; 
+for cmp in $dnndir/tst_forward/cmp/*.cmp; do
+  #local/mlsa_synthesis_63_mlpg.sh --voice_thresh 0.5 --alpha $alpha --fftlen $fftlen --srate $srate --bndap_order $bndap_order --mcep_order $order --delta_order 2 $cmp $dnndir/tst_forward/wav_mlpg/`basename $cmp .cmp`.wav data/train/var_cmp.txt
+  local/mix_excitation_mlsa_mlpg.sh --syn_cmd $mix_mlsa --filter_file $cppmary_base/data/mix_excitation_5filters_199taps_48Kz.txt $cmp $dnndir/tst_forward/wav_mlpg/`basename $cmp .cmp`.wav data/train/var_cmp.txt
 done
 
 if [ $PACKAGE_DNN -gt 0 ]; then
