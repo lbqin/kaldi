@@ -44,6 +44,9 @@ NOISEMASK=50  # standard deviation of white noise to mask noises in f0 extractio
 MLEN=$(($MGCORDER+1))
 
 job=1
+srate=44100
+fshift=5
+FRAMESHIFT=$(( $srate * $fshift / 1000 ))
 
 #echo "$0 $@"  # Print the command line for logging
 . parse_options.sh

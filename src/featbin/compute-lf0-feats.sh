@@ -27,6 +27,7 @@ SOPR=$tooldir/sopr
 VOPR=$tooldir/vopr
 NAN=$tooldir/nan
 MINMAX=$tooldir/minmax
+PITCH=$tooldir/pitch
 
 SAMPFREQ=44100   # Sampling frequency (48kHz)
 FRAMELEN=1103   # Frame length in point (1200 = 48000 * 0.025)
@@ -46,6 +47,12 @@ NOISEMASK=50  # standard deviation of white noise to mask noises in f0 extractio
 MLEN=$(($MGCORDER+1))
 job=1
 
+srate=44100
+fshift=5
+FRAMESHIFT=$(( $srate * $fshift / 1000 ))
+SAMPKHZ=`echo $srate | $X2X +af | $SOPR -m 0.001 | $X2X +fa`;
+pitch_format=1  #0 pitch; 1 f0; 2 logf0
+
 #echo "$0 $@"  # Print the command line for logging
 
 . parse_options.sh
@@ -61,15 +68,18 @@ fi
 for i in `awk -v lst="$1" 'BEGIN{if (lst ~ /^scp/) sub("[^:]+:[[:space:]]*","", lst); while (getline < lst) print $1 "___" $2}'`; do
     name=${i%%___*}
     wfilename=${i##*___}
-    raw=$tmpdir/temp$job.raw
-    sox $wfilename $raw
-    count=`echo "0.005 * $SAMPFREQ" | $BC -l`; 
-    $STEP -l `printf "%.0f" $count` -v 0.0 | $X2X +fs > $tmpdir/lf0$job.head; 
-    count=`echo "0.025 * $SAMPFREQ" | $BC -l`; 
-    $STEP -l `printf "%.0f" $count` -v 0.0 | $X2X +fs > $tmpdir/lf0$job.tail;
-    cat $tmpdir/lf0$job.head $raw lf0$job.tail | $X2X +sf > $tmpdir/lf0$job; 
-    leng=`$X2X +fa $tmpdir/lf0$job | $WC -l`; 
-    $NRAND -l $leng | $SOPR -m $NOISEMASK | $VOPR -a $tmpdir/lf0$job | $X2X +fs > $tmpdir/lf0$job.raw;
-    $TCLSH local/scripts/getf0.tcl -l -lf0 -H $UPPERF0 -L $LOWERF0 -p $FRAMESHIFT -r $SAMPFREQ $tmpdir/lf0$job.raw | \
-    awk -v name=$name 'BEGIN{print name, "[";} {print} END{print "]"}'
+    #raw=$tmpdir/temp$job.raw
+    #sox $wfilename $raw
+    # count=`echo "0.005 * $SAMPFREQ" | $BC -l`; 
+    # $STEP -l `printf "%.0f" $count` -v 0.0 | $X2X +fs > $tmpdir/lf0$job.head; 
+    # count=`echo "0.025 * $SAMPFREQ" | $BC -l`; 
+    # $STEP -l `printf "%.0f" $count` -v 0.0 | $X2X +fs > $tmpdir/lf0$job.tail;
+    # cat $tmpdir/lf0$job.head $raw lf0$job.tail | $X2X +sf > $tmpdir/lf0$job; 
+    # leng=`$X2X +fa $tmpdir/lf0$job | $WC -l`; 
+    # $NRAND -l $leng | $SOPR -m $NOISEMASK | $VOPR -a $tmpdir/lf0$job | $X2X +fs > $tmpdir/lf0$job.raw;
+    # $TCLSH local/scripts/getf0.tcl -l -lf0 -H $UPPERF0 -L $LOWERF0 -p $FRAMESHIFT -r $SAMPFREQ $tmpdir/lf0$job.raw | \
+
+    sox $wfilename -t raw - | ${X2X} +sf | $PITCH -H $UPPERF0 -L $LOWERF0 -p $FRAMESHIFT -s $SAMPKHZ -o $pitch_format | \
+    $X2X +f +a | \
+    awk -v name=$name 'BEGIN{print name, "[";} {if($1 > 0) print 1, $1; else print 0, 250.0;} END{print "]"}'
 done | copy-feats ark:- "$2"

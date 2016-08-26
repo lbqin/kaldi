@@ -7,7 +7,7 @@ srate=44100
 delta_order=0
 mgc_order=34
 str_order=5
-f0_order=1
+f0_order=2
 # Continuous f0, no mixing
 voice_thresh=0.8
 alpha=0.55
@@ -16,6 +16,7 @@ tmpdir=/tmp
 win=local/win
 syn_cmd=
 filter_file=local/filters/mix_excitation_5filters_199taps_48Kz.txt
+use_logf0=0
 
 [ -f path.sh ] && . ./path.sh; 
 . parse_options.sh || exit 1;
@@ -99,23 +100,23 @@ if [ "$var_file" != "" ]; then
     echo "mgc smoothing"
     mlpg -i 0 -m $mgc_order $mgc_win $mpdf | x2x +f +a$(( $mgc_order + 1 )) > $mgc
     echo "f0 smoothing"
-    mlpg -i 0 -m $(( $f0_order - 1 )) $f0_win $fpdf | x2x +f +a$f0_order > $f0
+    mlpg -i 0 -m $(( $f0_order - 1 )) $f0_win $fpdf | x2x +f +a$f0_order > ${f0}_raw
     echo "str smoothing"
     mlpg -i 0 -m $(( $str_order - 1 )) $str_win $strpdf | x2x +f +a$str_order > $str
 
-    
+    cat ${f0}_raw | awk -v thresh=$voice_thresh '{if ($1 > thresh) print $2; else print 0.0}' > $f0
+
     # Do not do mlpg on mgc
     #cat $cmp | cut -d " " -f $mgc_offset-$(($mgc_offset + $mgc_order)) > $mgc
 else
     cat $cmp | cut -d " " -f $mgc_offset-$(($mgc_offset + $mgc_order)) > $mgc
-    #cat $cmp | cut -d " " -f $f0_offset-$(($f0_offset + $f0_order - 1)) | awk -v thresh=$voice_thresh '{if ($1 > thresh) print $2; else print 0.0}' > $f0
-    #cat $cmp | cut -d " " -f $str_offset-$(($str_offset + $str_order - 1)) | awk '{for (i = 1; i <= NF; i++) if ($i >= 0.0) printf "0.0 " ; else printf "%f ", 20 * ($i) / log(10); printf "\n"}' > $str
-    cat $cmp | cut -d " " -f $f0_offset-$(($f0_offset + $f0_order - 1)) > $f0
+    cat $cmp | cut -d " " -f $(($f0_offset+1)) > $f0
+    #cat $cmp | cut -d " " -f $f0_offset-$(($f0_offset + $f0_order - 1)) > $f0
     cat $cmp | cut -d " " -f $str_offset-$(($str_offset + $str_order - 1))  > $str
 fi
 
 x2x +af $mgc > $mgc.float
 x2x +af $str > $str.float
 x2x +af $f0 > $f0.float
-echo "$syn_cmd $filter_file $mgc.float $f0.float $str.float $out_wav"
-$syn_cmd $filter_file $mgc.float $f0.float $str.float $out_wav
+echo "$syn_cmd $filter_file $mgc.float $f0.float $str.float $out_wav $use_logf0"
+$syn_cmd $filter_file $mgc.float $f0.float $str.float $out_wav $use_logf0
