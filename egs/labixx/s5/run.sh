@@ -8,7 +8,7 @@ FRAMESHIFT=0.005
 #featdir=/home/sooda/data/features/
 #corpus_dir=/home/sooda/data/tts/labixx1000_44k/
 featdir=/home/sooda/data/features_small/
-corpus_dir=/home/sooda/data/tts/labixx120/
+corpus_dir=/home/sooda/data/tts/labixx1000/
 test_dir=/home/sooda/data/tts/test/
 cppmary_base=/home/sooda/speech/cppmary/
 cppmary_bin=$cppmary_base/build/
@@ -141,11 +141,11 @@ if [ $EXTRACT_FEAT_MARY -gt 0 ]; then
 			local/make_pitch.sh --pitch-config conf/pitch-44k.conf $f0flen data/$step exp/make_pitch/$step $featdir;
 		fi
 
-        local/make_lf0.sh --sample-frequency $sample_rate data/$step exp/make_lf0/$step $featdir
+        #local/make_lf0.sh --sample-frequency $sample_rate data/$step exp/make_lf0/$step $featdir
         local/make_mgc.sh --sample-frequency $sample_rate data/$step exp/make_mgc/$step $featdir
         local/make_str.sh --sample-frequency $sample_rate data/$step exp/make_str/$step $featdir
         # Have to set the length tolerance to 1, as mcep files are a bit longer than the others for some reason
-        paste-feats --length-tolerance=6 scp:data/$step/pitch_feats.scp scp:data/$step/mgc_feats.scp scp:data/$step/str_feats.scp ark,scp:$featdir/${step}_cmp_feats.ark,data/$step/feats.scp
+        paste-feats --length-tolerance=1 scp:data/$step/pitch_feats.scp scp:data/$step/mgc_feats.scp scp:data/$step/str_feats.scp ark,scp:$featdir/${step}_cmp_feats.ark,data/$step/feats.scp
         #paste-feats --length-tolerance=1 scp:data/$step/lf0_feats.scp  scp:data/$step/pitch_feats.scp ark,scp:$featdir/${step}_cmp_feats.ark,data/$step/feats.scp
         steps/compute_cmvn_stats.sh data/$step exp/compute_cmvn/$step data/$step
     done
@@ -407,13 +407,13 @@ if [ $TRAIN_DNN -gt 0 ]; then
     echo " ### Step 4a: duration model DNN ###"
     # A. Small one for duration modelling
     rm -rf $expdurdir
-    $train_cmd $expdurdir/log/train_nnet.log local/train_nnet_basic.sh --delta_order 2 --config conf/3-layer-nn-splice5.conf --learn_rate 0.02 --momentum 0.1 --halving-factor 0.5 --min_iters 15 --max_iters 50 --randomize true --cache_size 50000 --bunch_size 200 --mlpOption " " --hid-dim 100 $lbldurdir/train $lbldurdir/dev $durdir/train $durdir/dev $expdurdir
+    $train_cmd $expdurdir/log/train_nnet.log local/train_nnet_basic.sh --delta_order 2 --config conf/3-layer-nn-splice5.conf --learn_rate 0.02 --momentum 0.1 --halving-factor 0.9 --min_iters 15 --max_iters 50 --randomize true --cache_size 50000 --bunch_size 200 --mlpOption " " --hid-dim 100 $lbldurdir/train $lbldurdir/dev $durdir/train $durdir/dev $expdurdir
 
     # B. Larger DNN for acoustic features
     echo " ### Step 4b: acoustic model DNN ###"
 
     rm -rf $dnndir
-    $train_cmd $dnndir/log/train_nnet.log local/train_nnet_basic.sh --delta_order 2 --config conf/3-layer-nn-splice5.conf --learn_rate 0.04 --momentum 0.1 --halving-factor 0.5 --min_iters 15 --randomize true --cache_size 50000 --bunch_size 200 --mlpOption " " --hid-dim 700 $lbldir/train $lbldir/dev $acdir/train $acdir/dev $dnndir
+    $train_cmd $dnndir/log/train_nnet.log local/train_nnet_basic.sh --delta_order 2 --config conf/3-layer-nn-splice5.conf --learn_rate 0.04 --momentum 0.1 --halving-factor 0.9 --min_iters 15 --randomize true --cache_size 50000 --bunch_size 200 --mlpOption " " --hid-dim 700 $lbldir/train $lbldir/dev $acdir/train $acdir/dev $dnndir
 
     if [ $TRAIN_DNN -eq 2 ]; then
         echo "exit after train dnn"
@@ -586,8 +586,7 @@ local/make_forward_fmllr.sh $dnndir $lbldir/eval $dnndir/tst_forward/ ""
 rm -rf $dnndir/tst_forward/wav_mlpg
 mkdir -p $dnndir/tst_forward/wav_mlpg/; 
 for cmp in $dnndir/tst_forward/cmp/*.cmp; do
-  #local/mlsa_synthesis_63_mlpg.sh --voice_thresh 0.5 --alpha $alpha --fftlen $fftlen --sample_rate $sample_rate --bndap_order $bndap_order --mcep_order $order --delta_order 2 $cmp $dnndir/tst_forward/wav_mlpg/`basename $cmp .cmp`.wav data/train/var_cmp.txt
-  local/mix_excitation_mlsa_mlpg.sh --syn_cmd $mix_mlsa --sample-frequency $sample_rate --filter_file $filter_file --delta_order 2 $cmp $dnndir/tst_forward/wav_mlpg/`basename $cmp .cmp`.wav data/train/var_cmp.txt
+  local/mix_excitation_mlsa_mlpg.sh --voice_thresh 0.4 --smooth 0 --syn_cmd $mix_mlsa --sample-frequency $sample_rate --filter_file $filter_file --delta_order 2 $cmp $dnndir/tst_forward/wav_mlpg/`basename $cmp .cmp`.wav data/train/var_cmp.txt
 done
 
 if [ $PACKAGE_DNN -gt 0 ]; then

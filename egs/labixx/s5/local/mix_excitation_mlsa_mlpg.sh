@@ -17,6 +17,7 @@ win=local/win
 syn_cmd=
 filter_file=local/filters/mix_excitation_5filters_199taps_48Kz.txt
 use_logf0=0
+smooth=0
 
 [ -f path.sh ] && . ./path.sh; 
 . parse_options.sh || exit 1;
@@ -72,17 +73,16 @@ BEGIN{nb = split(bnd, bnda, ";"); bnda[nb + 1] = off+1; nb += 1;}
   printf "\n"
 }' > $cmp
 
-
-if [ "$var_file" != "" ]; then
-    #mgc_win="-d $win/mgc_d1.win -d $win/mgc_d2.win"
-    #f0_win="-d $win/logF0_d1.win -d $win/logF0_d2.win"
-    #str_win="-d $win/str_d1.win -d $win/str_d2.win"
+if [ "$var_file" != "" -a $smooth -eq 1 ]; then
+    mgc_win="-d $win/logF0_d1.win -d $win/logF0_d2.win"
+    f0_win="-d $win/logF0_d1.win -d $win/logF0_d2.win"
+    str_win="-d $win/logF0_d1.win -d $win/logF0_d2.win"
     #mgc_win="-d -0.20 -0.10 0.00 0.10 0.20 -d 0.29 -0.14 -0.29 -0.14 0.29"
     #f0_win="-d -0.20 -0.10 0.00 0.10 0.20 -d 0.29 -0.14 -0.29 -0.14 0.29"
     #str_win="-d -0.20 -0.10 0.00 0.10 0.20 -d 0.29 -0.14 -0.29 -0.14 0.29"
-    mgc_win="-d -0.20 -0.10 0.00 0.10 0.20 -d 0.04 0.04 0.01 -0.04 -0.1 -0.04 0.01 0.04 0.04"
-    f0_win="-d -0.20 -0.10 0.00 0.10 0.20 -d 0.04 0.04 0.01 -0.04 -0.1 -0.04 0.01 0.04 0.04"
-    str_win="-d -0.20 -0.10 0.00 0.10 0.20 -d 0.04 0.04 0.01 -0.04 -0.1 -0.04 0.01 0.04 0.04"
+    #mgc_win="-d -0.20 -0.10 0.00 0.10 0.20 -d 0.04 0.04 0.01 -0.04 -0.1 -0.04 0.01 0.04 0.04"
+    #f0_win="-d -0.20 -0.10 0.00 0.10 0.20 -d 0.04 0.04 0.01 -0.04 -0.1 -0.04 0.01 0.04 0.04"
+    #str_win="-d -0.20 -0.10 0.00 0.10 0.20 -d 0.04 0.04 0.01 -0.04 -0.1 -0.04 0.01 0.04 0.04"
     
     echo "Extracting variances..."
     cat $var_file | awk '{printf "%f ", $2}' > $var
