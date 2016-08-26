@@ -3,7 +3,7 @@
 # Copyright 2016 Liushouda
 
 period=5
-srate=44100
+sample_frequency=44100
 delta_order=0
 mgc_order=34
 str_order=5
@@ -20,7 +20,6 @@ use_logf0=0
 
 [ -f path.sh ] && . ./path.sh; 
 . parse_options.sh || exit 1;
-
 
 cmp_file=$1
 out_wav=$2
@@ -104,19 +103,19 @@ if [ "$var_file" != "" ]; then
     echo "str smoothing"
     mlpg -i 0 -m $(( $str_order - 1 )) $str_win $strpdf | x2x +f +a$str_order > $str
 
-    cat ${f0}_raw | awk -v thresh=$voice_thresh '{if ($1 > thresh) print $2; else print 0.0}' > $f0
+    cat ${f0}_raw | awk -v thresh=$voice_thresh '{if ($1 > thresh && $2 > 10) print $2; else print 0.0}' > $f0
 
     # Do not do mlpg on mgc
     #cat $cmp | cut -d " " -f $mgc_offset-$(($mgc_offset + $mgc_order)) > $mgc
 else
     cat $cmp | cut -d " " -f $mgc_offset-$(($mgc_offset + $mgc_order)) > $mgc
-    cat $cmp | cut -d " " -f $(($f0_offset+1)) > $f0
-    #cat $cmp | cut -d " " -f $f0_offset-$(($f0_offset + $f0_order - 1)) > $f0
+    #cat $cmp | cut -d " " -f $(($f0_offset+1)) > $f0
+    cat $cmp | cut -d " " -f $f0_offset-$(($f0_offset + $f0_order - 1)) | awk -v thresh=$voice_thresh '{if ($1 > thresh && $2 > 10) print $2; else print 0.0}' > $f0
     cat $cmp | cut -d " " -f $str_offset-$(($str_offset + $str_order - 1))  > $str
 fi
 
 x2x +af $mgc > $mgc.float
 x2x +af $str > $str.float
 x2x +af $f0 > $f0.float
-echo "$syn_cmd $filter_file $mgc.float $f0.float $str.float $out_wav $use_logf0"
-$syn_cmd $filter_file $mgc.float $f0.float $str.float $out_wav $use_logf0
+echo "$syn_cmd $filter_file $mgc.float $f0.float $str.float $out_wav $use_logf0 $sample_frequency"
+$syn_cmd $filter_file $mgc.float $f0.float $str.float $out_wav $use_logf0 $sample_frequency

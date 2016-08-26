@@ -47,23 +47,39 @@ NOISEMASK=50  # standard deviation of white noise to mask noises in f0 extractio
 MLEN=$(($MGCORDER+1))
 job=1
 
-srate=44100
-fshift=5
-FRAMESHIFT=$(( $srate * $fshift / 1000 ))
-SAMPKHZ=`echo $srate | $X2X +af | $SOPR -m 0.001 | $X2X +fa`;
-pitch_format=1  #0 pitch; 1 f0; 2 logf0
-
 #echo "$0 $@"  # Print the command line for logging
+srate=16000
 
 . parse_options.sh
 
-if [ $# != 2 ]; then
-   echo "Wrong #arguments ($#, expected 2)"
-   echo "Usage: compute-lf0-feats.sh [options] scp:<in.scp> <wspecifier>"
-   echo " => will generate mcep using marytts tool"
-   echo " e.g.: compute-lf0-feats.sh wav.scp ark:feats.ark"
-   exit 1;
+SAMPFREQ=$srate
+fshift=5
+FRAMESHIFT=$(( $srate * $fshift / 1000 ))
+
+if [ "$srate" == "16000" ]; then
+  FREQWARP=0.42
+  FFTLEN=512
+  FRAMELEN=400
+elif [ "$srate" == "44100" ]; then
+  FREQWARP=0.53
+  FFTLEN=2048
+  FRAMELEN=1103
+elif [ "$srate" == "48000" ]; then
+  FREQWARP=0.55
+  FFTLEN=2048
+  FRAMELEN=1200
 fi
+
+SAMPKHZ=`echo $srate | $X2X +af | $SOPR -m 0.001 | $X2X +fa`;
+pitch_format=1  #0 pitch; 1 f0; 2 logf0
+
+# if [ $# != 2 ]; then
+#    echo "Wrong #arguments ($#, expected 2)"
+#    echo "Usage: compute-lf0-feats.sh [options] scp:<in.scp> <wspecifier>"
+#    echo " => will generate mcep using marytts tool"
+#    echo " e.g.: compute-lf0-feats.sh wav.scp ark:feats.ark"
+#    exit 1;
+# fi
 
 for i in `awk -v lst="$1" 'BEGIN{if (lst ~ /^scp/) sub("[^:]+:[[:space:]]*","", lst); while (getline < lst) print $1 "___" $2}'`; do
     name=${i%%___*}
@@ -79,7 +95,7 @@ for i in `awk -v lst="$1" 'BEGIN{if (lst ~ /^scp/) sub("[^:]+:[[:space:]]*","", 
     # $NRAND -l $leng | $SOPR -m $NOISEMASK | $VOPR -a $tmpdir/lf0$job | $X2X +fs > $tmpdir/lf0$job.raw;
     # $TCLSH local/scripts/getf0.tcl -l -lf0 -H $UPPERF0 -L $LOWERF0 -p $FRAMESHIFT -r $SAMPFREQ $tmpdir/lf0$job.raw | \
 
-    sox $wfilename -t raw - | ${X2X} +sf | $PITCH -H $UPPERF0 -L $LOWERF0 -p $FRAMESHIFT -s $SAMPKHZ -o $pitch_format | \
+    sox $wfilename -t raw - | $X2X +sf | $PITCH -H $UPPERF0 -L $LOWERF0 -p $FRAMESHIFT -s $SAMPKHZ -o $pitch_format | \
     $X2X +f +a | \
     awk -v name=$name 'BEGIN{print name, "[";} {if($1 > 0) print 1, $1; else print 0, 250.0;} END{print "]"}'
 done | copy-feats ark:- "$2"

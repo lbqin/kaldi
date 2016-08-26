@@ -7,6 +7,7 @@
 nj=8
 cmd=run.pl
 compress=false
+sample_frequency=16000
 # End configuration section.
 
 echo "$0 $@"  # Print the command line for logging
@@ -83,11 +84,8 @@ else
     in_feats="scp,p:$logdir/wav_${name}.JOB.scp"
 fi
 
-lf0_feats="ark,s,cs:compute-lf0-feats.sh $in_feats ark:- |"
-
-
 $cmd JOB=1:$nj $logdir/make_lf0.JOB.log \
-    copy-feats --compress=$compress "ark,s,cs:compute-lf0-feats.sh --job JOB $in_feats ark:- |" \
+    copy-feats --compress=$compress "ark,s,cs:compute-lf0-feats.sh --srate $sample_frequency --job JOB $in_feats ark:- |" \
       ark,scp:$lf0dir/raw_lf0_$name.JOB.ark,$lf0dir/raw_lf0_$name.JOB.scp \
      || exit 1;
 

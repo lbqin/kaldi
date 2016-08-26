@@ -42,14 +42,30 @@ LOWERF0=80    # lower limit for f0 extraction (Hz)
 UPPERF0=420    # upper limit for f0 extraction (Hz)
 NOISEMASK=50  # standard deviation of white noise to mask noises in f0 extraction
 MLEN=$(($MGCORDER+1))
+srate=16000
 
 job=1
-srate=44100
-fshift=5
-FRAMESHIFT=$(( $srate * $fshift / 1000 ))
 
 #echo "$0 $@"  # Print the command line for logging
 . parse_options.sh
+
+SAMPFREQ=$srate
+fshift=5
+FRAMESHIFT=$(( $srate * $fshift / 1000 ))
+
+if [ "$srate" == "16000" ]; then
+  FREQWARP=0.42
+  FFTLEN=512
+  FRAMELEN=400
+elif [ "$srate" == "44100" ]; then
+  FREQWARP=0.53
+  FFTLEN=2048
+  FRAMELEN=1103
+elif [ "$srate" == "48000" ]; then
+  FREQWARP=0.55
+  FFTLEN=2048
+  FRAMELEN=1200
+fi
 
 if [ $# != 2 ]; then
    echo "Wrong #arguments ($#, expected 2)"

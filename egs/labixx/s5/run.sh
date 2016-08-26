@@ -3,10 +3,12 @@ source path.sh
 H=`pwd`  #exp home
 n=8
 thchs=/home/sooda/data/thchs30-openslr
-srate=16000
+sample_rate=16000
 FRAMESHIFT=0.005
-featdir=/home/sooda/data/features/
-corpus_dir=/home/sooda/data/tts/labixx1000_44k/
+#featdir=/home/sooda/data/features/
+#corpus_dir=/home/sooda/data/tts/labixx1000_44k/
+featdir=/home/sooda/data/features_small/
+corpus_dir=/home/sooda/data/tts/labixx120/
 test_dir=/home/sooda/data/tts/test/
 cppmary_base=/home/sooda/speech/cppmary/
 cppmary_bin=$cppmary_base/build/
@@ -23,18 +25,18 @@ expdurdir=$exp/tts_dnn_dur_3_delta_quin5
 dnndir=$exp/tts_dnn_train_3_deltasc2_quin5
 #config
 #0 not run; 1 run; 2 run and exit
-DATA_PREP_MARY=1
-LANG_PREP_PHONE64=1
+DATA_PREP_MARY=0
+LANG_PREP_PHONE64=0
 EXTRACT_FEAT=0
-EXTRACT_FEAT_MARY=1
-ALIGNMENT_PHONE=1
-GENERATE_LABLE=1
-GENERATE_STATE=1
-EXTRACT_TXT_FEATURE=1
-CONVERT_FEATURE=1
-TRAIN_DNN=1
-PACKAGE_DNN=1
-VOCODER_TEST=1
+EXTRACT_FEAT_MARY=0
+ALIGNMENT_PHONE=0
+GENERATE_LABLE=0
+GENERATE_STATE=0
+EXTRACT_TXT_FEATURE=0
+CONVERT_FEATURE=0
+TRAIN_DNN=0
+PACKAGE_DNN=0
+VOCODER_TEST=0
 spk="lbx"
 audio_dir=$corpus_dir/wav 
 prompt_lab=prompt_labels
@@ -50,7 +52,7 @@ echo "##### Step 0: data preparation #####"
 if [ $DATA_PREP_MARY -gt 0 ]; then
     rm -rf data/{train,dev,full}
     rm -rf exp exp_align
-    rm -rf $featdir
+    #rm -rf $featdir
     mkdir -p data/{train,dev,full}
 
     makeid="xargs -i basename {} .wav"
@@ -116,8 +118,8 @@ if [ $EXTRACT_FEAT -gt 0 ]; then
         # Regenerate pitch with more appropriate window
         local/make_pitch.sh --pitch-config conf/pitch.conf --frame_length $f0flen data/$step exp/make_pitch/$step $featdir;
         # Generate Mel Cepstral features
-        #steps/make_mcep.sh  --sample-frequency $srate --frame_length $mcepflen  data/${step}_$spk exp/make_mcep/${step}_$spk   $featdir	
-        local/make_mcep.sh --sample-frequency $srate data/$step exp/make_mcep/$step $featdir
+        #steps/make_mcep.sh  --sample-frequency $sample_rate --frame_length $mcepflen  data/${step}_$spk exp/make_mcep/${step}_$spk   $featdir	
+        local/make_mcep.sh --sample-frequency $sample_rate data/$step exp/make_mcep/$step $featdir
         # Merge features
         # Have to set the length tolerance to 1, as mcep files are a bit longer than the others for some reason
         paste-feats --length-tolerance=1 scp:data/$step/pitch_feats.scp scp:data/$step/mcep_feats.scp scp:data/$step/bndap_feats.scp ark,scp:$featdir/${step}_cmp_feats.ark,data/$step/feats.scp
@@ -133,11 +135,18 @@ fi
 
 if [ $EXTRACT_FEAT_MARY -gt 0 ]; then
     for step in train dev; do
-        local/make_lf0.sh data/$step exp/make_lf0/$step $featdir
-        local/make_mgc.sh data/$step exp/make_mgc/$step $featdir
-        local/make_str.sh data/$step exp/make_str/$step $featdir
+		if [ "$sample_rate" == "16000" ]; then
+			local/make_pitch.sh --pitch-config conf/pitch.conf data/$step exp/make_pitch/$step $featdir;
+		elif [ "$sample_rate" == "44100" ]; then
+			local/make_pitch.sh --pitch-config conf/pitch-44k.conf $f0flen data/$step exp/make_pitch/$step $featdir;
+		fi
+
+        local/make_lf0.sh --sample-frequency $sample_rate data/$step exp/make_lf0/$step $featdir
+        local/make_mgc.sh --sample-frequency $sample_rate data/$step exp/make_mgc/$step $featdir
+        local/make_str.sh --sample-frequency $sample_rate data/$step exp/make_str/$step $featdir
         # Have to set the length tolerance to 1, as mcep files are a bit longer than the others for some reason
-        paste-feats --length-tolerance=6 scp:data/$step/lf0_feats.scp scp:data/$step/mgc_feats.scp scp:data/$step/str_feats.scp ark,scp:$featdir/${step}_cmp_feats.ark,data/$step/feats.scp
+        paste-feats --length-tolerance=6 scp:data/$step/pitch_feats.scp scp:data/$step/mgc_feats.scp scp:data/$step/str_feats.scp ark,scp:$featdir/${step}_cmp_feats.ark,data/$step/feats.scp
+        #paste-feats --length-tolerance=1 scp:data/$step/lf0_feats.scp  scp:data/$step/pitch_feats.scp ark,scp:$featdir/${step}_cmp_feats.ark,data/$step/feats.scp
         steps/compute_cmvn_stats.sh data/$step exp/compute_cmvn/$step data/$step
     done
 
@@ -158,7 +167,11 @@ utils/validate_lang.pl $lang
 
 if [ $ALIGNMENT_PHONE -gt 0 ]; then
     for step in full; do
-      steps/make_mfcc.sh data/$step exp/make_mfcc/$step $featdir
+      if [ "$sample_rate" == "16000" ]; then
+          steps/make_mfcc.sh --mfcc-config conf/mfcc.conf data/$step exp/make_mfcc/$step $featdir
+      elif [ "$sample_rate" == "44100" ]; then
+          steps/make_mfcc.sh --mfcc-config conf/mfcc-44k.conf data/$step exp/make_mfcc/$step $featdir
+      fi
       steps/compute_cmvn_stats.sh data/$step exp/make_mfcc/$step $featdir
     done
     # Now running the normal kaldi recipe for forced alignment
@@ -394,13 +407,13 @@ if [ $TRAIN_DNN -gt 0 ]; then
     echo " ### Step 4a: duration model DNN ###"
     # A. Small one for duration modelling
     rm -rf $expdurdir
-    $train_cmd $expdurdir/_train_nnet.log local/train_nnet_basic.sh --delta_order 2 --config conf/3-layer-nn-splice5.conf --learn_rate 0.02 --momentum 0.1 --halving-factor 0.5 --min_iters 15 --max_iters 50 --randomize true --cache_size 50000 --bunch_size 200 --mlpOption " " --hid-dim 100 $lbldurdir/train $lbldurdir/dev $durdir/train $durdir/dev $expdurdir
+    $train_cmd $expdurdir/log/train_nnet.log local/train_nnet_basic.sh --delta_order 2 --config conf/3-layer-nn-splice5.conf --learn_rate 0.02 --momentum 0.1 --halving-factor 0.5 --min_iters 15 --max_iters 50 --randomize true --cache_size 50000 --bunch_size 200 --mlpOption " " --hid-dim 100 $lbldurdir/train $lbldurdir/dev $durdir/train $durdir/dev $expdurdir
 
     # B. Larger DNN for acoustic features
     echo " ### Step 4b: acoustic model DNN ###"
 
     rm -rf $dnndir
-    $train_cmd $dnndir/_train_nnet.log local/train_nnet_basic.sh --delta_order 2 --config conf/3-layer-nn-splice5.conf --learn_rate 0.04 --momentum 0.1 --halving-factor 0.5 --min_iters 15 --randomize true --cache_size 50000 --bunch_size 200 --mlpOption " " --hid-dim 700 $lbldir/train $lbldir/dev $acdir/train $acdir/dev $dnndir
+    $train_cmd $dnndir/log/train_nnet.log local/train_nnet_basic.sh --delta_order 2 --config conf/3-layer-nn-splice5.conf --learn_rate 0.04 --momentum 0.1 --halving-factor 0.5 --min_iters 15 --randomize true --cache_size 50000 --bunch_size 200 --mlpOption " " --hid-dim 700 $lbldir/train $lbldir/dev $acdir/train $acdir/dev $dnndir
 
     if [ $TRAIN_DNN -eq 2 ]; then
         echo "exit after train dnn"
@@ -412,21 +425,24 @@ fi
 ## 5. Synthesis
 ##############################
 
-if [ "$srate" == "16000" ]; then
+if [ "$sample_rate" == "16000" ]; then
   order=39
   alpha=0.42
   fftlen=1024
   bndap_order=21
-elif [ "$srate" == "48000" ]; then
+  filter_file=$cppmary_base/data/mix_excitation_5filters_99taps_16Kz.txt
+elif [ "$sample_rate" == "48000" ]; then
   order=60
   alpha=0.55
   fftlen=4096
   bndap_order=25
-elif [ "$srate" == "44100" ]; then
+  filter_file=$cppmary_base/data/mix_excitation_5filters_199taps_48Kz.txt
+elif [ "$sample_rate" == "44100" ]; then
   order=60
   alpha=0.53
   fftlen=4096
   bndap_order=25
+  filter_file=$cppmary_base/data/mix_excitation_5filters_199taps_48Kz.txt
 fi
 
 echo "##### Step 5: synthesis #####"
@@ -434,10 +450,11 @@ echo "##### Step 5: synthesis #####"
 if [ $VOCODER_TEST -gt 0 ]; then
     # Original samples:
     echo "Synthesizing vocoded training samples"
+    rm -rf exp_dnn/orig2
     mkdir -p exp_dnn/orig2/cmp exp_dnn/orig2/wav
     copy-feats scp:data/dev/feats.scp ark,t:- | awk -v dir=exp_dnn/orig2/cmp/ '($2 == "["){if (out) close(out); out=dir $1 ".cmp";}($2 != "["){if ($NF == "]") $NF=""; print $0 > out}'
     for cmp in exp_dnn/orig2/cmp/*.cmp; do
-      local/mix_excitation_mlsa_mlpg.sh --syn_cmd $mix_mlsa --filter_file $cppmary_base/data/mix_excitation_5filters_199taps_48Kz.txt $cmp exp_dnn/orig2/wav/`basename $cmp .cmp`.wav
+      local/mix_excitation_mlsa_mlpg.sh --syn_cmd $mix_mlsa --sample-frequency $sample_rate --filter_file $filter_file $cmp exp_dnn/orig2/wav/`basename $cmp .cmp`.wav
     done
     if [ $VOCODER_TEST -eq 2 ]; then
         echo "exit vocoder test"
@@ -566,16 +583,17 @@ done
 local/make_forward_fmllr.sh $dnndir $lbldir/eval $dnndir/tst_forward/ ""
 
 # 5. Vocoding
+rm -rf $dnndir/tst_forward/wav_mlpg
 mkdir -p $dnndir/tst_forward/wav_mlpg/; 
 for cmp in $dnndir/tst_forward/cmp/*.cmp; do
-  #local/mlsa_synthesis_63_mlpg.sh --voice_thresh 0.5 --alpha $alpha --fftlen $fftlen --srate $srate --bndap_order $bndap_order --mcep_order $order --delta_order 2 $cmp $dnndir/tst_forward/wav_mlpg/`basename $cmp .cmp`.wav data/train/var_cmp.txt
-  local/mix_excitation_mlsa_mlpg.sh --syn_cmd $mix_mlsa --filter_file $cppmary_base/data/mix_excitation_5filters_199taps_48Kz.txt $cmp $dnndir/tst_forward/wav_mlpg/`basename $cmp .cmp`.wav data/train/var_cmp.txt
+  #local/mlsa_synthesis_63_mlpg.sh --voice_thresh 0.5 --alpha $alpha --fftlen $fftlen --sample_rate $sample_rate --bndap_order $bndap_order --mcep_order $order --delta_order 2 $cmp $dnndir/tst_forward/wav_mlpg/`basename $cmp .cmp`.wav data/train/var_cmp.txt
+  local/mix_excitation_mlsa_mlpg.sh --syn_cmd $mix_mlsa --sample-frequency $sample_rate --filter_file $filter_file --delta_order 2 $cmp $dnndir/tst_forward/wav_mlpg/`basename $cmp .cmp`.wav data/train/var_cmp.txt
 done
 
 if [ $PACKAGE_DNN -gt 0 ]; then
     echo "#### Step 6: packaging DNN voice ####"
 
-    local/make_dnn_voice.sh --spk $spk --srate $srate --mcep_order $order --bndap_order $bndap_order --alpha $alpha --fftlen $fftlen
+    local/make_dnn_voice.sh --spk $spk --sample_rate $sample_rate --mcep_order $order --bndap_order $bndap_order --alpha $alpha --fftlen $fftlen
 
     echo "Voice packaged successfully. Portable models have been stored in ${spk}_mdl."
     echo "Synthesis can be performed using:
