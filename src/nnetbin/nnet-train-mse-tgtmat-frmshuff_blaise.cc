@@ -214,7 +214,7 @@ int main(int argc, char *argv[]) {
 	  if (frame_weights != "") {
 	    weights = weights_reader.Value();
 	  } else { // all per-frame weights are 1.0
-	    weights.Resize(fea_mat.NumRows());
+	    weights.Resize(feats.NumRows());
 	    weights.Set(1.0);
 	  }
 	  //targets = tgt_mat;
