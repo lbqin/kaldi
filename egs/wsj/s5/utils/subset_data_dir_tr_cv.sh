@@ -29,6 +29,7 @@ seed=777 # use seed for speaker shuffling
 echo "$0 $@"  # Print the command line for logging
 
 uttbase=true; # by default, we choose last 10% utterances for CV
+shuffle_utt=true;
 
 if [ "$1" == "--cv-spk-percent" ]; then
   uttbase=false;
@@ -68,9 +69,19 @@ if $uttbase; then
   #the rest of the data will be that big
   N_tail=$((N-N_head))
 
-  #now call the subset_data_dir.sh and fix the directories
-  subset_data_dir.sh --first $srcdir $N_head $trndir
-  subset_data_dir.sh --last $srcdir $N_tail $cvdir
+
+  if $shuffle_utt; then
+    echo "shuffle utt"
+    awk '{print $1}' $srcdir/utt2spk | shuffle_list.pl --srand $seed > $trndir/_tmpf_randutt
+    head -n $N_head $trndir/_tmpf_randutt > $trndir/_tmpf_trainutt
+    tail -n $N_tail $trndir/_tmpf_randutt > $cvdir/_tmpf_cvutt
+    subset_data_dir.sh --utt-list $trndir/_tmpf_trainutt $srcdir $trndir
+    subset_data_dir.sh --utt-list $cvdir/_tmpf_cvutt $srcdir $cvdir
+  else
+    #now call the subset_data_dir.sh and fix the directories
+    subset_data_dir.sh --first $srcdir $N_head $trndir
+    subset_data_dir.sh --last $srcdir $N_tail $cvdir
+  fi
 
   exit 0;
 fi
