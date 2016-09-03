@@ -3,12 +3,13 @@ source path.sh
 H=`pwd`  #exp home
 n=8
 thchs=/home/sooda/data/thchs30-openslr
-sample_rate=16000
+#sample_rate=16000
+sample_rate=48000
 FRAMESHIFT=0.005
 #featdir=/home/sooda/data/features/
 #corpus_dir=/home/sooda/data/tts/labixx1000_44k/
-featdir=/home/sooda/data/features_small/
-corpus_dir=/home/sooda/data/tts/labixx1000/
+featdir=/home/sooda/data/features/
+corpus_dir=/home/sooda/data/tts/labixx1000_48k/
 test_dir=/home/sooda/data/tts/test/
 cppmary_base=/home/sooda/speech/cppmary/
 cppmary_bin=$cppmary_base/build/
@@ -35,7 +36,7 @@ GENERATE_STATE=0
 EXTRACT_TXT_FEATURE=0
 CONVERT_FEATURE=0
 TRAIN_DNN=0
-PACKAGE_DNN=0
+PACKAGE_DNN=1
 VOCODER_TEST=0
 spk="lbx"
 audio_dir=$corpus_dir/wav 
@@ -51,7 +52,7 @@ lbldurdir=lbldurdata
 echo "##### Step 0: data preparation #####"
 if [ $DATA_PREP_MARY -gt 0 ]; then
     rm -rf data/{train,dev,full}
-    rm -rf exp exp_align
+    rm -rf $exp $expa
     #rm -rf $featdir
     mkdir -p data/{train,dev,full}
 
@@ -136,18 +137,20 @@ fi
 if [ $EXTRACT_FEAT_MARY -gt 0 ]; then
     for step in train dev; do
 		if [ "$sample_rate" == "16000" ]; then
-			local/make_pitch.sh --pitch-config conf/pitch.conf data/$step exp/make_pitch/$step $featdir;
+			local/make_pitch.sh --pitch-config conf/pitch.conf data/$step exp/make_pitch/$step $featdir || exit 1
 		elif [ "$sample_rate" == "44100" ]; then
-			local/make_pitch.sh --pitch-config conf/pitch-44k.conf $f0flen data/$step exp/make_pitch/$step $featdir;
+			local/make_pitch.sh --pitch-config conf/pitch-44k.conf data/$step exp/make_pitch/$step $featdir || exit 1
+        elif [ "$sample_rate" == "48000" ]; then
+			local/make_pitch.sh --pitch-config conf/pitch-48k.conf data/$step exp/make_pitch/$step $featdir || exit 1
 		fi
 
-        #local/make_lf0.sh --sample-frequency $sample_rate data/$step exp/make_lf0/$step $featdir
-        local/make_mgc.sh --sample-frequency $sample_rate data/$step exp/make_mgc/$step $featdir
-        local/make_str.sh --sample-frequency $sample_rate data/$step exp/make_str/$step $featdir
+        #local/make_lf0.sh --sample-frequency $sample_rate data/$step exp/make_lf0/$step $featdir || exit 1
+        local/make_mgc.sh --sample-frequency $sample_rate data/$step exp/make_mgc/$step $featdir || exit 1
+        local/make_str.sh --sample-frequency $sample_rate data/$step exp/make_str/$step $featdir || exit 1
         # Have to set the length tolerance to 1, as mcep files are a bit longer than the others for some reason
-        paste-feats --length-tolerance=1 scp:data/$step/pitch_feats.scp scp:data/$step/mgc_feats.scp scp:data/$step/str_feats.scp ark,scp:$featdir/${step}_cmp_feats.ark,data/$step/feats.scp
+        paste-feats --length-tolerance=1 scp:data/$step/pitch_feats.scp scp:data/$step/mgc_feats.scp scp:data/$step/str_feats.scp ark,scp:$featdir/${step}_cmp_feats.ark,data/$step/feats.scp || exit 1
         #paste-feats --length-tolerance=1 scp:data/$step/lf0_feats.scp  scp:data/$step/pitch_feats.scp ark,scp:$featdir/${step}_cmp_feats.ark,data/$step/feats.scp
-        steps/compute_cmvn_stats.sh data/$step exp/compute_cmvn/$step data/$step
+        steps/compute_cmvn_stats.sh data/$step exp/compute_cmvn/$step data/$step || exit 1
     done
 
     if [ $EXTRACT_FEAT_MARY -eq 2 ]; then
@@ -171,16 +174,18 @@ if [ $ALIGNMENT_PHONE -gt 0 ]; then
           steps/make_mfcc.sh --mfcc-config conf/mfcc.conf data/$step exp/make_mfcc/$step $featdir
       elif [ "$sample_rate" == "44100" ]; then
           steps/make_mfcc.sh --mfcc-config conf/mfcc-44k.conf data/$step exp/make_mfcc/$step $featdir
+      elif [ "$sample_rate" == "48000" ]; then
+          steps/make_mfcc.sh --mfcc-config conf/mfcc-48k.conf data/$step exp/make_mfcc/$step $featdir
       fi
-      steps/compute_cmvn_stats.sh data/$step exp/make_mfcc/$step $featdir
+      steps/compute_cmvn_stats.sh data/$step exp/make_mfcc/$step $featdir || exit 1
     done
     # Now running the normal kaldi recipe for forced alignment
     test=data/eval_mfcc
-    steps/train_mono.sh --boost-silence 0.25 --nj $n --cmd "$train_cmd" \
+    steps/train_mono.sh --boost-silence 0.20 --nj $n --cmd "$train_cmd" \
                   $train $lang $expa/mono
-    steps/align_si.sh --boost-silence 0.25 --nj $n --cmd "$train_cmd" \
+    steps/align_si.sh --boost-silence 0.20 --nj $n --cmd "$train_cmd" \
                 $train $lang $expa/mono $expa/mono_ali
-    steps/train_deltas.sh  --boost-silence 0.25 --cmd "$train_cmd" \
+    steps/train_deltas.sh  --boost-silence 0.20 --cmd "$train_cmd" \
                  500 5000 $train $lang $expa/mono_ali $expa/tri1
 
     steps/align_si.sh  --nj $n --cmd "$train_cmd" \
@@ -197,15 +202,15 @@ if [ $ALIGNMENT_PHONE -gt 0 ]; then
         500 5000 $train $lang $expa/tri2_ali_full $expa/quin
 
     # Create alignments
-    steps/align_si.sh  --nj $n --cmd "$train_cmd" \
-      $train $lang $expa/quin $expa/quin_ali_full
+    steps/align_si.sh --nj $n --cmd "$train_cmd" \
+      $train $lang $expa/quin $expa/quin_ali_full || exit 1
 
     ali=$expa/quin_ali_full
     # Extract phone alignment
     ali-to-phones --per-frame $ali/final.mdl ark:"gunzip -c $ali/ali.*.gz|" ark,t:- \
-      | utils/int2sym.pl -f 2- $lang/phones.txt > $ali/phones.txt
+      | utils/int2sym.pl -f 2- $lang/phones.txt > $ali/phones.txt || exit 1
 
-    ali-to-hmmstate $ali/final.mdl ark:"gunzip -c $ali/ali.*.gz|" ark,t:$ali/states.tra
+    ali-to-hmmstate $ali/final.mdl ark:"gunzip -c $ali/ali.*.gz|" ark,t:$ali/states.tra || exit 1
 
     if [ $ALIGNMENT_PHONE -eq 2 ]; then
         echo "exit after phone alignment"
@@ -407,13 +412,13 @@ if [ $TRAIN_DNN -gt 0 ]; then
     echo " ### Step 4a: duration model DNN ###"
     # A. Small one for duration modelling
     rm -rf $expdurdir
-    $train_cmd $expdurdir/log/train_nnet.log local/train_nnet_basic.sh --delta_order 2 --config conf/3-layer-nn-splice5.conf --learn_rate 0.02 --momentum 0.1 --halving-factor 0.9 --min_iters 15 --max_iters 50 --randomize true --cache_size 50000 --bunch_size 200 --mlpOption " " --hid-dim 100 $lbldurdir/train $lbldurdir/dev $durdir/train $durdir/dev $expdurdir
+    $train_cmd $expdurdir/log/train_nnet.log local/train_nnet_basic.sh --delta_order 2 --config conf/5-layer-nn-splice5.conf --learn_rate 0.02 --momentum 0.3 --halving-factor 0.8 --min_iters 15 --max_iters 50 --randomize true --cache_size 50000 --bunch_size 200 --mlpOption " " --hid-dim 512 $lbldurdir/train $lbldurdir/dev $durdir/train $durdir/dev $expdurdir
 
     # B. Larger DNN for acoustic features
     echo " ### Step 4b: acoustic model DNN ###"
 
     rm -rf $dnndir
-    $train_cmd $dnndir/log/train_nnet.log local/train_nnet_basic.sh --delta_order 2 --config conf/3-layer-nn-splice5.conf --learn_rate 0.04 --momentum 0.1 --halving-factor 0.9 --min_iters 15 --randomize true --cache_size 50000 --bunch_size 200 --mlpOption " " --hid-dim 700 $lbldir/train $lbldir/dev $acdir/train $acdir/dev $dnndir
+    $train_cmd $dnndir/log/train_nnet.log local/train_nnet_basic.sh --delta_order 2 --config conf/5-layer-nn-splice5.conf --learn_rate 0.04 --momentum 0.3 --halving-factor 0.8 --min_iters 15 --randomize true --cache_size 50000 --bunch_size 200 --mlpOption " " --hid-dim 512 $lbldir/train $lbldir/dev $acdir/train $acdir/dev $dnndir
 
     if [ $TRAIN_DNN -eq 2 ]; then
         echo "exit after train dnn"
@@ -586,7 +591,7 @@ local/make_forward_fmllr.sh $dnndir $lbldir/eval $dnndir/tst_forward/ ""
 rm -rf $dnndir/tst_forward/wav_mlpg
 mkdir -p $dnndir/tst_forward/wav_mlpg/; 
 for cmp in $dnndir/tst_forward/cmp/*.cmp; do
-  local/mix_excitation_mlsa_mlpg.sh --voice_thresh 0.4 --smooth 0 --syn_cmd $mix_mlsa --sample-frequency $sample_rate --filter_file $filter_file --delta_order 2 $cmp $dnndir/tst_forward/wav_mlpg/`basename $cmp .cmp`.wav data/train/var_cmp.txt
+  local/mix_excitation_mlsa_mlpg.sh --voice_thresh 0.4 --smooth 1 --syn_cmd $mix_mlsa --sample-frequency $sample_rate --filter_file $filter_file --delta_order 2 $cmp $dnndir/tst_forward/wav_mlpg/`basename $cmp .cmp`.wav data/train/var_cmp.txt
 done
 
 if [ $PACKAGE_DNN -gt 0 ]; then
