@@ -9,7 +9,7 @@ FRAMESHIFT=0.005
 #featdir=/home/sooda/data/features/
 #corpus_dir=/home/sooda/data/tts/labixx1000_44k/
 featdir=/home/sooda/data/features/
-corpus_dir=/home/sooda/data/tts/labixx1000_48k/
+corpus_dir=/home/sooda/data/tts/labixx2600_48k/
 test_dir=/home/sooda/data/tts/test/
 cppmary_base=/home/sooda/speech/cppmary/
 cppmary_bin=$cppmary_base/build/
@@ -20,6 +20,7 @@ expa=exp-align
 train=data/full
 lang=data/lang_phone
 dict=data/dict_phone
+phoneset=64
 
 exp=exp_dnn
 expdurdir=$exp/tts_dnn_dur_3_delta_quin5
@@ -27,7 +28,7 @@ dnndir=$exp/tts_dnn_train_3_deltasc2_quin5
 #config
 #0 not run; 1 run; 2 run and exit
 DATA_PREP_MARY=0
-LANG_PREP_PHONE64=0
+LANG_PREP_PHONE=0
 EXTRACT_FEAT=0
 EXTRACT_FEAT_MARY=0
 ALIGNMENT_PHONE=0
@@ -35,7 +36,7 @@ GENERATE_LABLE=0
 GENERATE_STATE=0
 EXTRACT_TXT_FEATURE=0
 CONVERT_FEATURE=0
-TRAIN_DNN=0
+TRAIN_DNN=1
 PACKAGE_DNN=1
 VOCODER_TEST=0
 spk="lbx"
@@ -59,14 +60,6 @@ if [ $DATA_PREP_MARY -gt 0 ]; then
     makeid="xargs -i basename {} .wav"
 
     find $audio_dir -name "*.wav" | sort | $makeid | awk -v audiodir=$audio_dir '{line=$1" "audiodir"/"$1".wav"; print line}' >> data/full/wav.scp
-
-    #generate alignment transcript with cppmary: phones.txt
-    cd $cppmary_base
-    $cppmary_bin/genTrainPhones "data/labixx.conf" $corpus_dir
-    cd $H
-
-    cat $corpus_dir/phones.txt | sort > data/full/text
-    #cat data/$x/wav.scp | awk -v spk=$spk '{na = split($1, a, "_"); printf "%s %s\n", $1, a[na]}' >> data/$x/utt2spk #one uttrance one speaker for parallel
     cat data/full/wav.scp | awk -v spk=$spk '{print $1, spk}' >> data/full/utt2spk
     utils/utt2spk_to_spk2utt.pl data/full/utt2spk > data/full/spk2utt
 
@@ -79,14 +72,18 @@ if [ $DATA_PREP_MARY -gt 0 ]; then
 fi
 
 
-echo "make ph64"
-if [ $LANG_PREP_PHONE64 -gt 0 ]; then
+echo "make phonset"
+if [ $LANG_PREP_PHONE -gt 0 ]; then
   rm -rf $dict $lang data/local/lang_phone
   cd $H; mkdir -p $dict $lang && \
-  cp $corpus_dir/dict/{extra_questions.txt,nonsilence_phones.txt,optional_silence.txt,silence_phones.txt} $dict  && \
-  cat $corpus_dir/dict/lexicon.txt | grep -v '<eps>' | sort -u > $dict/lexicon.txt  && \
+  cp local/dict$phoneset/{extra_questions.txt,nonsilence_phones.txt,optional_silence.txt,silence_phones.txt} $dict  && \
+  cat local/dict$phoneset/lexicon.txt | grep -v '<eps>' | sort -u > $dict/lexicon.txt  && \
   echo "<SIL> sil " >> $dict/lexicon.txt  || exit 1;
   utils/prepare_lang.sh --num-nonsil-states 5 --share-silence-phones true --position_dependent_phones false $dict "<SIL>" data/local/lang_phone $lang || exit 1;
+  if [ $LANG_PREP_PHONE -eq 2 ]; then
+      echo "exit in language"
+      exit
+  fi
 fi
 
 #############################################
@@ -147,9 +144,7 @@ if [ $EXTRACT_FEAT_MARY -gt 0 ]; then
         #local/make_lf0.sh --sample-frequency $sample_rate data/$step exp/make_lf0/$step $featdir || exit 1
         local/make_mgc.sh --sample-frequency $sample_rate data/$step exp/make_mgc/$step $featdir || exit 1
         local/make_str.sh --sample-frequency $sample_rate data/$step exp/make_str/$step $featdir || exit 1
-        # Have to set the length tolerance to 1, as mcep files are a bit longer than the others for some reason
         paste-feats --length-tolerance=1 scp:data/$step/pitch_feats.scp scp:data/$step/mgc_feats.scp scp:data/$step/str_feats.scp ark,scp:$featdir/${step}_cmp_feats.ark,data/$step/feats.scp || exit 1
-        #paste-feats --length-tolerance=1 scp:data/$step/lf0_feats.scp  scp:data/$step/pitch_feats.scp ark,scp:$featdir/${step}_cmp_feats.ark,data/$step/feats.scp
         steps/compute_cmvn_stats.sh data/$step exp/compute_cmvn/$step data/$step || exit 1
     done
 
@@ -169,23 +164,27 @@ utils/fix_data_dir.sh data/full
 utils/validate_lang.pl $lang
 
 if [ $ALIGNMENT_PHONE -gt 0 ]; then
-    for step in full; do
-      if [ "$sample_rate" == "16000" ]; then
-          steps/make_mfcc.sh --mfcc-config conf/mfcc.conf data/$step exp/make_mfcc/$step $featdir
-      elif [ "$sample_rate" == "44100" ]; then
-          steps/make_mfcc.sh --mfcc-config conf/mfcc-44k.conf data/$step exp/make_mfcc/$step $featdir
-      elif [ "$sample_rate" == "48000" ]; then
-          steps/make_mfcc.sh --mfcc-config conf/mfcc-48k.conf data/$step exp/make_mfcc/$step $featdir
-      fi
-      steps/compute_cmvn_stats.sh data/$step exp/make_mfcc/$step $featdir || exit 1
-    done
+    #generate alignment transcript with cppmary: phones.txt
+    cd $cppmary_base
+    $cppmary_bin/genTrainPhones "data/labixx$phoneset.conf" $corpus_dir
+    cd $H
+    cat $corpus_dir/phones.txt | sort > data/full/text
+
+    if [ "$sample_rate" == "16000" ]; then
+        steps/make_mfcc.sh --mfcc-config conf/mfcc.conf data/full exp/make_mfcc/full $featdir
+    elif [ "$sample_rate" == "44100" ]; then
+        steps/make_mfcc.sh --mfcc-config conf/mfcc-44k.conf data/full exp/make_mfcc/full $featdir
+    elif [ "$sample_rate" == "48000" ]; then
+        steps/make_mfcc.sh --mfcc-config conf/mfcc-48k.conf data/full exp/make_mfcc/full $featdir
+    fi
+    steps/compute_cmvn_stats.sh data/full exp/make_mfcc/full $featdir || exit 1
+
     # Now running the normal kaldi recipe for forced alignment
-    test=data/eval_mfcc
-    steps/train_mono.sh --boost-silence 0.20 --nj $n --cmd "$train_cmd" \
+    steps/train_mono.sh --boost-silence 0.25 --nj $n --cmd "$train_cmd" \
                   $train $lang $expa/mono
-    steps/align_si.sh --boost-silence 0.20 --nj $n --cmd "$train_cmd" \
+    steps/align_si.sh --boost-silence 0.25 --nj $n --cmd "$train_cmd" \
                 $train $lang $expa/mono $expa/mono_ali
-    steps/train_deltas.sh  --boost-silence 0.20 --cmd "$train_cmd" \
+    steps/train_deltas.sh  --boost-silence 0.25 --cmd "$train_cmd" \
                  500 5000 $train $lang $expa/mono_ali $expa/tri1
 
     steps/align_si.sh  --nj $n --cmd "$train_cmd" \
@@ -288,7 +287,7 @@ fi
 
 if [ $EXTRACT_TXT_FEATURE -gt 0 ]; then
     cd $cppmary_base
-    $cppmary_bin/genTextFeatureWithLab "data/labixx.conf" $corpus_dir $H/$lab/
+    $cppmary_bin/genTextFeatureWithLab "data/labixx$phoneset.conf" $corpus_dir $H/$lab/
     cd $H
     if [ $EXTRACT_TXT_FEATURE -eq 2 ]; then
         echo "exit after text feature"
@@ -298,10 +297,9 @@ fi
 
 
 if [ $CONVERT_FEATURE -gt 0 ]; then
-    step=full
     cat $textfeat \
     | awk '{print $1, "["; $1=""; na = split($0, a, ";"); for (i = 1; i < na; i++) print a[i]; print "]"}' \
-    | copy-feats ark:- ark,t,scp:$featdir/in_feats_$step.ark,$featdir/in_feats_$step.scp
+    | copy-feats ark:- ark,scp:$featdir/in_feats_full.ark,$featdir/in_feats_full.scp
 
     # HACKY
     # Generate features for duration modelling
@@ -360,6 +358,7 @@ if [ $CONVERT_FEATURE -gt 0 ]; then
       steps/compute_cmvn_stats.sh $dir $dir $dir
     done
 
+
     # Same for duration
     for step in train dev; do
       dir=$lbldurdir/$step
@@ -379,7 +378,6 @@ if [ $CONVERT_FEATURE -gt 0 ]; then
       steps/compute_cmvn_stats.sh $dir $dir $dir
     done
 
-
     #ensure consistency in lists
     #for dir in $lbldir $acdir; do
     for class in train dev; do
@@ -395,6 +393,14 @@ if [ $CONVERT_FEATURE -gt 0 ]; then
 fi
 
 
+if [ -s $acdir/train/feats.scp ]; then
+    echo "file $acdir/train/feats.scp not empty, continue to train"
+else
+    echo "file $acdir/train/feats.scp empty, there must be somethin wrong"
+    exit
+fi
+
+
 ##############################
 ## 4. Train DNN
 ##############################
@@ -403,22 +409,16 @@ if [ $TRAIN_DNN -gt 0 ]; then
     echo "##### Step 4: training DNNs #####"
 
     mkdir -p $exp
-
-    # Very basic one for testing
-    #mkdir -p $exp
-    #dir=$exp/tts_dnn_train_3e
-    #$cuda_cmd $dir/_train_nnet.log steps/train_nnet_basic.sh --config conf/3-layer-nn.conf --learn_rate 0.2 --momentum 0.1 --halving-factor 0.5 --min_iters 15 --randomize true --bunch_size 50 --mlpOption " " --hid-dim 300 $lbldir/train $lbldir/dev $acdir/train $acdir/dev $dir
-
-    echo " ### Step 4a: duration model DNN ###"
     # A. Small one for duration modelling
     rm -rf $expdurdir
-    $train_cmd $expdurdir/log/train_nnet.log local/train_nnet_basic.sh --delta_order 2 --config conf/5-layer-nn-splice5.conf --learn_rate 0.02 --momentum 0.3 --halving-factor 0.8 --min_iters 15 --max_iters 50 --randomize true --cache_size 50000 --bunch_size 200 --mlpOption " " --hid-dim 512 $lbldurdir/train $lbldurdir/dev $durdir/train $durdir/dev $expdurdir
+    # duration not need delta order?
+    $train_cmd $expdurdir/log/train_nnet.log local/train_nnet_basic.sh --delta_order 2 --config conf/5-layer-nn-splice5.conf --learn_rate 0.02 --momentum 0.3 --halving-factor 0.8 --min_iters 15 --max_iters 50 --randomize true --cache_size 50000 --bunch_size 200 --mlpOption " " --hid-dim 512 $lbldurdir/train $lbldurdir/dev $durdir/train $durdir/dev $expdurdir || exit 1
 
     # B. Larger DNN for acoustic features
     echo " ### Step 4b: acoustic model DNN ###"
 
     rm -rf $dnndir
-    $train_cmd $dnndir/log/train_nnet.log local/train_nnet_basic.sh --delta_order 2 --config conf/5-layer-nn-splice5.conf --learn_rate 0.04 --momentum 0.3 --halving-factor 0.8 --min_iters 15 --randomize true --cache_size 50000 --bunch_size 200 --mlpOption " " --hid-dim 512 $lbldir/train $lbldir/dev $acdir/train $acdir/dev $dnndir
+    $train_cmd $dnndir/log/train_nnet.log local/train_nnet_basic.sh --delta_order 2 --config conf/5-layer-nn-splice5.conf --learn_rate 0.04 --momentum 0.3 --halving-factor 0.8 --min_iters 15 --randomize true --cache_size 50000 --bunch_size 200 --mlpOption " " --hid-dim 512 $lbldir/train $lbldir/dev $acdir/train $acdir/dev $dnndir || exit 1
 
     if [ $TRAIN_DNN -eq 2 ]; then
         echo "exit after train dnn"
@@ -483,24 +483,20 @@ mkdir -p data/eval
 durIn=$test_dir/durali
 
 cd $cppmary_base
-$cppmary_bin/genDurInFeat "data/labixx.conf" $test_dir $durIn
+$cppmary_bin/genDurInFeat "data/labixx$phoneset.conf" $test_dir $durIn
 cd $H
 
 
-for step in eval; do
-  # Generate input feature for duration modelling
-  cat $durIn | awk '{print $1, "["; $1=""; na = split($0, a, ";"); for (i = 1; i < na; i++) for (state = 0; state < 5; state++) print a[i], state; print "]"}' | copy-feats ark:- ark,scp:$featdir/in_durfeats_$step.ark,$featdir/in_durfeats_$step.scp
-done
+# Generate input feature for duration modelling
+cat $durIn | awk '{print $1, "["; $1=""; na = split($0, a, ";"); for (i = 1; i < na; i++) for (state = 0; state < 5; state++) print a[i], state; print "]"}' | copy-feats ark:- ark,scp:$featdir/in_durfeats_eval.ark,$featdir/in_durfeats_eval.scp
 
 # Duration based test set
-for step in eval; do
-  dir=lbldurdata/$step
-  mkdir -p $dir
-  cp $featdir/in_durfeats_$step.scp $dir/feats.scp
-  cut -d ' ' -f 1 $dir/feats.scp | awk -v spk=$spk '{print $1, spk}' > $dir/utt2spk
-  utils/utt2spk_to_spk2utt.pl $dir/utt2spk > $dir/spk2utt
-  steps/compute_cmvn_stats.sh $dir $dir $dir
-done
+dir=lbldurdata/eval
+mkdir -p $dir
+cp $featdir/in_durfeats_eval.scp $dir/feats.scp
+cut -d ' ' -f 1 $dir/feats.scp | awk -v spk=$spk '{print $1, spk}' > $dir/utt2spk
+utils/utt2spk_to_spk2utt.pl $dir/utt2spk > $dir/spk2utt
+steps/compute_cmvn_stats.sh $dir $dir $dir
 
 # Generate label with DNN-generated duration
 echo "Synthesizing MLPG eval samples"
@@ -566,24 +562,22 @@ dnnIn=$test_dir/dnnali
 
 #call cppmary to generate dnnInput
 cd $cppmary_base
-$cppmary_bin/genDnnInFeat "data/labixx.conf" $test_dir $H/$testAlignDir/ $dnnIn
+$cppmary_bin/genDnnInFeat "data/labixx$phoneset.conf" $test_dir $H/$testAlignDir/ $dnnIn
 cd $H
 
 
 # 3. Turn them into DNN input labels (i.e. one sample per frame)
-for step in eval; do
-    cat $dnnIn \
-    | awk '{print $1, "["; $1=""; na = split($0, a, ";"); for (i = 1; i < na; i++) print a[i]; print "]"}' \
-    | copy-feats ark:- ark,t,scp:$featdir/in_feats_$step.ark,$featdir/in_feats_$step.scp
-done
-for step in eval; do
-  dir=lbldata/$step
-  mkdir -p $dir
-  cp $featdir/in_feats_$step.scp $dir/feats.scp
-  cut -d ' ' -f 1 $dir/feats.scp | awk -v spk=$spk '{print $1, spk}' > $dir/utt2spk
-  utils/utt2spk_to_spk2utt.pl $dir/utt2spk > $dir/spk2utt
-  steps/compute_cmvn_stats.sh $dir $dir $dir
-done
+cat $dnnIn \
+| awk '{print $1, "["; $1=""; na = split($0, a, ";"); for (i = 1; i < na; i++) print a[i]; print "]"}' \
+| copy-feats ark:- ark,t,scp:$featdir/in_feats_eval.ark,$featdir/in_feats_eval.scp
+
+dir=lbldata/eval
+mkdir -p $dir
+cp $featdir/in_feats_eval.scp $dir/feats.scp
+cut -d ' ' -f 1 $dir/feats.scp | awk -v spk=$spk '{print $1, spk}' > $dir/utt2spk
+utils/utt2spk_to_spk2utt.pl $dir/utt2spk > $dir/spk2utt
+steps/compute_cmvn_stats.sh $dir $dir $dir
+
 # 4. Forward pass through big DNN
 local/make_forward_fmllr.sh $dnndir $lbldir/eval $dnndir/tst_forward/ ""
 
