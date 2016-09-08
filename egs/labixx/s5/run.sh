@@ -43,7 +43,8 @@ audio_dir=$corpus_dir/wav
 prompt_lab=prompt_labels
 state_lab=states
 lab=labels
-textfeat=$corpus_dir/ali
+acoustic_textfeat=$corpus_dir/ali
+duration_textfeat=$corpus_dir/ali_dur
 acdir=data
 lbldir=lbldata
 durdir=durdata
@@ -272,7 +273,7 @@ if [ $GENERATE_STATE -gt 0 ]; then
     # paste the phone alignment and state aliment
     mkdir -p $lab
     rm -rf $lab/*.lab
-    for nn in `find $prompt_lab/*.lab | sort -u | xargs -i basename {} .lab`; do
+    for nn in `find $prompt_lab/*.lab | sort -u | xargs -n 1 basename | sed 's/\.lab//g' `; do
         statename=$state_lab/$nn.sta
         labelname=$prompt_lab/$nn.lab
         mergelab=$lab/$nn.lab
@@ -288,7 +289,7 @@ fi
 
 if [ $EXTRACT_TXT_FEATURE -gt 0 ]; then
     cd $cppmary_base
-    $cppmary_bin/genTextFeatureWithLab "data/labixx.conf" $corpus_dir $H/$lab/
+    $cppmary_bin/genTextFeatureWithLab "data/labixx.conf" $corpus_dir $H/$lab/ $acoustic_textfeat $duration_textfeat
     cd $H
     if [ $EXTRACT_TXT_FEATURE -eq 2 ]; then
         echo "exit after text feature"
@@ -299,49 +300,13 @@ fi
 
 if [ $CONVERT_FEATURE -gt 0 ]; then
     step=full
-    cat $textfeat \
-    | awk '{print $1, "["; $1=""; na = split($0, a, ";"); for (i = 1; i < na; i++) print a[i]; print "]"}' \
-    | copy-feats ark:- ark,t,scp:$featdir/in_feats_$step.ark,$featdir/in_feats_$step.scp
+    copy-feats ark:$acoustic_textfeat ark,t,scp:$featdir/in_feats_$step.ark,$featdir/in_feats_$step.scp
 
     # HACKY
     # Generate features for duration modelling
     # we remove relative position within phone and state
-    copy-feats ark:$featdir/in_feats_full.ark ark,t:- \
-    | awk -v nstate=5 'BEGIN{oldkey = 0; oldstate = -1; for (s = 0; s < nstate; s++) asd[s] = 0}
-    function print_phone(vkey, vasd, vpd) {
-      for (s = 0; s < nstate; s++) {
-        print vkey, s, vasd[s], vpd;
-        vasd[s] = 0;
-      }
-    }
-    (NF == 2){print}
-    (NF > 2){
-      n = NF;
-      if ($NF == "]") n = NF - 1;
-      state = $(n-4); sd = $(n-3); pd = $(n-1);
-      for (i = n-4; i <= NF; i++) $i = "";
-      len = length($0);
-      if (n != NF) len = len -1;
-      key = substr($0, 1, len - 5);
-      if ((key != oldkey) && (oldkey != 0)) {
-        print_phone(oldkey, asd, opd);
-        oldstate = -1;
-      }
-      if (state != oldstate) {
-        asd[state] += sd;
-      }
-      opd = pd;
-      oldkey = key;
-      oldstate = state;
-      if (NF != n) {
-        print_phone(key, asd, opd);
-        oldstate = -1;
-        oldkey = 0;
-        print "]";
-      }
-    }' > $featdir/tmp_durfeats_full.ark
 
-    duration_feats="ark:$featdir/tmp_durfeats_full.ark"
+    duration_feats="ark:$duration_textfeat"
     nfeats=$(feat-to-dim "$duration_feats" -)
 
     # Input
@@ -489,7 +454,7 @@ cd $H
 
 for step in eval; do
   # Generate input feature for duration modelling
-  cat $durIn | awk '{print $1, "["; $1=""; na = split($0, a, ";"); for (i = 1; i < na; i++) for (state = 0; state < 5; state++) print a[i], state; print "]"}' | copy-feats ark:- ark,scp:$featdir/in_durfeats_$step.ark,$featdir/in_durfeats_$step.scp
+  copy-feats ark:$durIn ark,scp:$featdir/in_durfeats_$step.ark,$featdir/in_durfeats_$step.scp
 done
 
 # Duration based test set
@@ -572,9 +537,7 @@ cd $H
 
 # 3. Turn them into DNN input labels (i.e. one sample per frame)
 for step in eval; do
-    cat $dnnIn \
-    | awk '{print $1, "["; $1=""; na = split($0, a, ";"); for (i = 1; i < na; i++) print a[i]; print "]"}' \
-    | copy-feats ark:- ark,t,scp:$featdir/in_feats_$step.ark,$featdir/in_feats_$step.scp
+    copy-feats ark:$dnnIn ark,t,scp:$featdir/in_feats_$step.ark,$featdir/in_feats_$step.scp
 done
 for step in eval; do
   dir=lbldata/$step
