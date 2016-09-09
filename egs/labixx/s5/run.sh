@@ -14,8 +14,6 @@ test_dir=/home/sooda/data/tts/test/
 cppmary_base=/home/sooda/speech/cppmary/
 cppmary_bin=$cppmary_base/build/
 mix_mlsa=$cppmary_bin/mlsaSynWithFilenames
-#lang=data/lang
-#dict=data/dict
 expa=exp-align
 train=data/full
 lang=data/lang_phone
@@ -300,10 +298,6 @@ fi
 if [ $CONVERT_FEATURE -gt 0 ]; then
     copy-feats ark:$acoustic_textfeat ark,t,scp:$featdir/in_feats_full.ark,$featdir/in_feats_full.scp
 
-    # HACKY
-    # Generate features for duration modelling
-    # we remove relative position within phone and state
-
     duration_feats="ark:$duration_textfeat"
     nfeats=$(feat-to-dim "$duration_feats" -)
 
@@ -312,11 +306,9 @@ if [ $CONVERT_FEATURE -gt 0 ]; then
     # Output: duration of phone and state are assumed to be the 2 last features
     select-feats $(( $nfeats - 2 ))-$(( $nfeats - 1 )) "$duration_feats" ark,scp:$featdir/out_durfeats_full.ark,$featdir/out_durfeats_full.scp
 
-    # Split in train / dev
     for step in train dev; do
       dir=$lbldir/$step
       mkdir -p $dir
-      #cp data/$step/{utt2spk,spk2utt} $dir
       utils/filter_scp.pl data/$step/utt2spk $featdir/in_feats_full.scp > $dir/feats.scp
       cat data/$step/utt2spk | awk -v lst=$dir/feats.scp 'BEGIN{ while (getline < lst) n[$1] = 1}{if (n[$1]) print}' > $dir/utt2spk
       utils/utt2spk_to_spk2utt.pl < $dir/utt2spk > $dir/spk2utt
@@ -328,7 +320,6 @@ if [ $CONVERT_FEATURE -gt 0 ]; then
     for step in train dev; do
       dir=$lbldurdir/$step
       mkdir -p $dir
-      #cp data/$step/{utt2spk,spk2utt} $dir
       utils/filter_scp.pl data/$step/utt2spk $featdir/in_durfeats_full.scp > $dir/feats.scp
       cat data/$step/utt2spk | awk -v lst=$dir/feats.scp 'BEGIN{ while (getline < lst) n[$1] = 1}{if (n[$1]) print}' > $dir/utt2spk
       utils/utt2spk_to_spk2utt.pl < $dir/utt2spk > $dir/spk2utt
@@ -336,7 +327,6 @@ if [ $CONVERT_FEATURE -gt 0 ]; then
 
       dir=$durdir/$step
       mkdir -p $dir
-      #cp data/$step/{utt2spk,spk2utt} $dir
       utils/filter_scp.pl data/$step/utt2spk $featdir/out_durfeats_full.scp > $dir/feats.scp
       cat data/$step/utt2spk | awk -v lst=$dir/feats.scp 'BEGIN{ while (getline < lst) n[$1] = 1}{if (n[$1]) print}' > $dir/utt2spk
       utils/utt2spk_to_spk2utt.pl < $dir/utt2spk > $dir/spk2utt
@@ -344,7 +334,6 @@ if [ $CONVERT_FEATURE -gt 0 ]; then
     done
 
     #ensure consistency in lists
-    #for dir in $lbldir $acdir; do
     for class in train dev; do
       cp $lbldir/$class/feats.scp $lbldir/$class/feats_full.scp
       cp $acdir/$class/feats.scp $acdir/$class/feats_full.scp
@@ -375,6 +364,7 @@ if [ $TRAIN_DNN -gt 0 ]; then
 
     mkdir -p $exp
     # A. Small one for duration modelling
+    echo " ### Step 4a: duration model DNN ###"
     rm -rf $expdurdir
     # duration not need delta order?
     $train_cmd $expdurdir/log/train_nnet.log local/train_nnet_basic.sh --delta_order 2 --config conf/5-layer-nn-splice5.conf --learn_rate 0.02 --momentum 0.3 --halving-factor 0.8 --min_iters 15 --max_iters 50 --randomize true --cache_size 50000 --bunch_size 200 --mlpOption " " --hid-dim 512 $lbldurdir/train $lbldurdir/dev $durdir/train $durdir/dev $expdurdir || exit 1
@@ -489,21 +479,10 @@ for cmp in $expdurdir/tst_forward/cmp/*.cmp; do
     smpd = 0;
     for (i = 1; i <= nstate; i++) smpd += sd[i % nstate];
     rmpd = int((smpd + mpd) / 2 + 0.5);
-    # Normal phones
-    if (int(sd[0] + 0.5) == 0) {
-      for (i = 1; i <= 3; i++) {
-        sd[i % nstate] = int(sd[i % nstate] / smpd * rmpd + 0.5);
-      }
-      if (sd[3] <= 0) sd[3] = 1;
-      for (i = 4; i <= nstate; i++) sd[i % nstate] = 0;
+    for (i = 1; i <= nstate; i++) {
+      sd[i % nstate] = int(sd[i % nstate] / smpd * rmpd + 0.5);
     }
-    # Silence phone
-    else {
-      for (i = 1; i <= nstate; i++) {
-        sd[i % nstate] = int(sd[i % nstate] / smpd * rmpd + 0.5);
-      }
-      if (sd[0] <= 0) sd[0] = 1;
-    }
+    if (sd[0] <= 0) sd[0] = 1;
     if (sd[1] <= 0) sd[1] = 1;
     smpd = 0;
     for (i = 1; i <= nstate; i++) smpd += sd[i % nstate];
@@ -511,9 +490,6 @@ for cmp in $expdurdir/tst_forward/cmp/*.cmp; do
     printf "%f %f | ", tstart, tend > outfile
     for (i = 1; i <= nstate; i++) {
       if (sd[i % nstate] > 0) {
-        #tend = tstart + sd[i % nstate] * 0.005;
-        #print tstart, tend, int(NR / 5), i-1 >> outfile
-        #tstart = tend;
         printf "%d %d ", i-1, sd[i%nstate] >> outfile
       }
     }
