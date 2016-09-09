@@ -228,12 +228,12 @@ if [ $GENERATE_LABLE -gt 0 ]; then
     {
         outfile = labeldir"/"$1".lab";
         for(i=2;i<=NF;i++) {
-            currenttime = currenttime + frameshift;
             if (lasttoken != "" && lasttoken != $i) {
                 print lasttoken, lasttime, currenttime >> outfile
                 lasttime = currenttime
             }
             lasttoken = $i; 
+            currenttime = currenttime + frameshift;
         }
         print lasttoken, lasttime, currenttime >> outfile
     }'
