@@ -45,10 +45,10 @@ activationOutput="<sigmoid>"
 
 # scheduling config
 min_iters=0    # set to enforce minimum number of iterations
-max_iters=20  # maximum number of iterations
-start_halving_inc=0.01 # frm-accuracy improvement ratio to begin learn_rate reduction
+max_iters=30  # maximum number of iterations
+start_halving_inc=0.005 # frm-accuracy improvement ratio to begin learn_rate reduction
 end_halving_inc=0.001   # frm-accuracy improvement ratio to terminate the training
-halving_factor=0.5    # factor to multiply learn_rate
+halving_factor=0.9    # factor to multiply learn_rate
 # tool config
 TRAIN_TOOL="nnet-train-mse-tgtmat-frmshuff_blaise" # training tool used for training / cross validation
 # NB: the format for gpu option has changed!

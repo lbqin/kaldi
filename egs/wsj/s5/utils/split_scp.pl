@@ -55,7 +55,7 @@ for ($x = 1; $x <= 2; $x++) {
         }
     }
     if ($ARGV[0] =~ "--utt2spk=(.+)") {
-        $utt2spk_file=$1;
+        #$utt2spk_file=$1;
         shift;
     }
 }

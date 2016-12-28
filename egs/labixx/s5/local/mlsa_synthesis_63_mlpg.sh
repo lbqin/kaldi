@@ -95,17 +95,23 @@ BEGIN{nb = split(bnd, bnda, ";"); bnda[nb + 1] = off+1; nb += 1;}
 
 if [ "$var_file" != "" ]; then
     if [ $delta_mult -eq 2 ]; then
-	mcep_win="-d $win/mcep_d1.win"
-	f0_win="-d $win/logF0_d1.win"
-	bndap_win="-d $win/bndap_d1.win"
+        mcep_win="-d $win/mcep_d1.win"
+        f0_win="-d $win/logF0_d1.win"
+        bndap_win="-d $win/bndap_d1.win"
     elif [ $delta_mult -eq 3 ]; then
-	mcep_win="-d $win/mcep_d1.win -d $win/mcep_d2.win"
-	f0_win="-d $win/logF0_d1.win -d $win/logF0_d2.win"
-	bndap_win="-d $win/bndap_d1.win -d $win/bndap_d2.win"
+        #mcep_win="-d $win/mcep_d1.win -d $win/mcep_d2.win"
+        #f0_win="-d $win/logF0_d1.win -d $win/logF0_d2.win"
+        #bndap_win="-d $win/bndap_d1.win -d $win/bndap_d2.win"
+        #mcep_win="-d -0.20 -0.10 0.00 0.10 0.20 -d 0.29 -0.14 -0.29 -0.14 0.29"
+        #f0_win="-d -0.20 -0.10 0.00 0.10 0.20 -d 0.29 -0.14 -0.29 -0.14 0.29"
+        #bndap_win="-d -0.20 -0.10 0.00 0.10 0.20 -d 0.29 -0.14 -0.29 -0.14 0.29"
+        mcep_win="-d -0.20 -0.10 0.00 0.10 0.20 -d 0.04 0.04 0.01 -0.04 -0.1 -0.04 0.01 0.04 0.04"
+        f0_win="-d -0.20 -0.10 0.00 0.10 0.20 -d 0.04 0.04 0.01 -0.04 -0.1 -0.04 0.01 0.04 0.04"
+        bndap_win="-d -0.20 -0.10 0.00 0.10 0.20 -d 0.04 0.04 0.01 -0.04 -0.1 -0.04 0.01 0.04 0.04"
     else
-	mcep_win=""
-	f0_win=""
-	bndap_win=""
+        mcep_win=""
+        f0_win=""
+        bndap_win=""
     fi
     echo "Extracting variances..."
     cat $var_file | awk '{printf "%f ", $2}' > $var
@@ -120,6 +126,7 @@ if [ "$var_file" != "" ]; then
     
     echo "Running mlpg..."
     echo "mcep smoothing"
+    echo "mlpg -i 0 -m $mcep_order $mcep_win $mpdf | x2x +f +a$(( $mcep_order + 1 )) > $mcep"
     mlpg -i 0 -m $mcep_order $mcep_win $mpdf | x2x +f +a$(( $mcep_order + 1 )) > $mcep
     echo "f0 smoothing"
     mlpg -i 0 -m $(( $f0_order - 1 )) $f0_win $fpdf > ${f0}_raw
@@ -133,7 +140,8 @@ if [ "$var_file" != "" ]; then
     #cat $cmp | cut -d " " -f $mcep_offset-$(($mcep_offset + $mcep_order)) > $mcep
 else
     cat $cmp | cut -d " " -f $mcep_offset-$(($mcep_offset + $mcep_order)) > $mcep
-    cat $cmp | cut -d " " -f $f0_offset-$(($f0_offset + $f0_order - 1)) | awk -v thresh=$voice_thresh '{if ($1 > thresh) print $2; else print 0.0}' > $f0
+    #cat $cmp | cut -d " " -f $f0_offset-$(($f0_offset + $f0_order - 1)) | awk -v thresh=$voice_thresh '{if ($1 > thresh) print $2; else print 0.0}' > $f0
+    cat $cmp | cut -d " " -f $f0_offset-$(($f0_offset + $f0_order - 1)) > $f0
     cat $cmp | cut -d " " -f $bndap_offset-$(($bndap_offset + $bndap_order - 1)) | awk '{for (i = 1; i <= NF; i++) if ($i >= 0.0) printf "0.0 " ; else printf "%f ", 20 * ($i) / log(10); printf "\n"}' > $bap
 fi
 
