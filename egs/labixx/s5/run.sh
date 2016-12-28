@@ -9,8 +9,9 @@ FRAMESHIFT=0.005
 #featdir=/home/sooda/data/features/
 #corpus_dir=/home/sooda/data/tts/labixx1000_44k/
 featdir=/home/sooda/data/features/
-corpus_dir=/home/sooda/data/tts/labixx2600_48k/
+corpus_dir=/home/sooda/data/tts/rmm_48k/
 test_dir=/home/sooda/data/tts/test/
+#cppmary_base=/home/sooda/speech/cppmary_release/
 cppmary_base=/home/sooda/speech/cppmary/
 cppmary_bin=$cppmary_base/build/
 mix_mlsa=$cppmary_bin/mlsaSynWithFilenames
@@ -25,15 +26,16 @@ expdurdir=$exp/tts_dnn_dur_3_delta_quin5
 dnndir=$exp/tts_dnn_train_3_deltasc2_quin5
 #config
 #0 not run; 1 run; 2 run and exit
-DATA_PREP_MARY=0
-LANG_PREP_PHONE=0
+DATA_PREP_MARY=1
+LANG_PREP_PHONE=1
 EXTRACT_FEAT=0
 EXTRACT_FEAT_MARY=0
-ALIGNMENT_PHONE=0
-GENERATE_LABLE=0
-GENERATE_STATE=0
+ALIGNMENT_PHONE=1
+GENERATE_LABLE=1
+GENERATE_STATE=1
+EXTRACT_MERLIN_FEATURE=2
 EXTRACT_TXT_FEATURE=0
-CONVERT_FEATURE=0
+CONVERT_FEATURE=1
 TRAIN_DNN=1
 PACKAGE_DNN=1
 VOCODER_TEST=0
@@ -283,9 +285,24 @@ if [ $GENERATE_STATE -gt 0 ]; then
     fi
 fi
 
+if [ $EXTRACT_MERLIN_FEATURE -gt 0 ]; then
+    cd $cppmary_base
+    rm $corpus_dir/lab/*.lab
+    mkdir -p $corpus_dir/lab
+    echo "$cppmary_bin/genMerlinFeat "data/labixx.conf" $corpus_dir $H/$lab/ $corpus_dir/lab"
+    $cppmary_bin/genMerlinFeat "data/labixx.conf" $corpus_dir $H/$lab/ $corpus_dir/lab
+    cd $corpus_dir/lab
+    ls $corpus_dir/lab | xargs -i basename {} .lab > $corpus_dir/basename.scp
+    cd $H
+    if [ $EXTRACT_MERLIN_FEATURE -eq 2 ]; then
+        echo "exit after merlin feature"
+        exit
+    fi
+fi
 
 if [ $EXTRACT_TXT_FEATURE -gt 0 ]; then
     cd $cppmary_base
+    echo "$cppmary_bin/genTextFeatureWithLab $cppmary_base/data/labixx.conf $corpus_dir $H/$lab/ $acoustic_textfeat $duration_textfeat"
     $cppmary_bin/genTextFeatureWithLab "data/labixx.conf" $corpus_dir $H/$lab/ $acoustic_textfeat $duration_textfeat
     cd $H
     if [ $EXTRACT_TXT_FEATURE -eq 2 ]; then
@@ -503,6 +520,7 @@ dnnIn=$test_dir/dnnali
 
 #call cppmary to generate dnnInput
 cd $cppmary_base
+echo "$cppmary_bin/genDnnInFeat "data/labixx$phoneset.conf" $test_dir $H/$testAlignDir/ $dnnIn"
 $cppmary_bin/genDnnInFeat "data/labixx$phoneset.conf" $test_dir $H/$testAlignDir/ $dnnIn
 cd $H
 
