@@ -9,7 +9,7 @@ FRAMESHIFT=0.005
 #featdir=/home/sooda/data/features/
 #corpus_dir=/home/sooda/data/tts/labixx1000_44k/
 featdir=/home/sooda/data/features/
-corpus_dir=/home/sooda/data/tts/rmm_48k/
+corpus_dir=/home/sooda/data/tts/rihui_48k/
 test_dir=/home/sooda/data/tts/test/
 #cppmary_base=/home/sooda/speech/cppmary_release/
 cppmary_base=/home/sooda/speech/cppmary/
@@ -289,6 +289,8 @@ if [ $EXTRACT_MERLIN_FEATURE -gt 0 ]; then
     cd $cppmary_base
     rm $corpus_dir/lab/*.lab
     mkdir -p $corpus_dir/lab
+    rm $corpus_dir/$lab/*.lab
+    cp -r $H/$lab $corpus_dir/$lab
     echo "$cppmary_bin/genMerlinFeat "data/labixx.conf" $corpus_dir $H/$lab/ $corpus_dir/lab"
     $cppmary_bin/genMerlinFeat "data/labixx.conf" $corpus_dir $H/$lab/ $corpus_dir/lab
     cd $corpus_dir/lab
