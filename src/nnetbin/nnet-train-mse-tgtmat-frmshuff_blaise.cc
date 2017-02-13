@@ -111,8 +111,8 @@ int main(int argc, char *argv[]) {
     nnet.Read(model_filename);
     nnet.SetTrainOptions(trn_opts);
     if (dropout_retention > 0.0) {
-      nnet_transf.SetDropoutRetention(dropout_retention);
-      nnet.SetDropoutRetention(dropout_retention);
+      nnet_transf.SetDropoutRate(dropout_retention);
+      nnet.SetDropoutRate(dropout_retention);
     }
 
     kaldi::int64 total_frames = 0;
