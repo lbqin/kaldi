@@ -6,32 +6,20 @@ set -e
 mfccdir=`pwd`/mfcc
 vaddir=`pwd`/mfcc
 nj=8
-audio_dir_train=/home/sooda/data/ivector_train/
-audio_dir_test=/home/sooda/data/ivector_test/
+audio_dir_train=/home/sooda/data/ivector/train/
+audio_dir_test=/home/sooda/data/ivector/test/
 
-stage=3
+stage=4
 num_gauss=2048
-ivecdim=100
-
+ivecdim=30
+makeid="xargs -i basename {} .wav"
 
 if [ $stage -le 1 ] ; then
-    rm -rf data/{train,test}
-    mkdir -p data/{train,test}
+    rm -rf data/train
+    mkdir -p data/train
 
-    makeid="xargs -i basename {} .wav"
-
-    for step in train test; do
+    for step in train; do
         eval audio_dir=\${audio_dir_${step}}
-        #find $audio_dir -name "*.wav" | sort | $makeid | awk -v audiodir=$audio_dir '{line=$1" "audiodir"/"$1".wav"; print line}' > data/$step/wav.scp
-
-
-        #cat data/$step/wav.scp | awk  '{
-        #str_num = split($1, strs, "_");
-        #speaker_id = strs[1];
-        #line = $1" "speaker_id
-        #print line
-        #}' > data/$step/utt2spk
-        #utils/utt2spk_to_spk2utt.pl data/$step/utt2spk > data/$step/spk2utt
 
          for nn in `find  $audio_dir/*.wav | sort -u | xargs -i basename {} .wav`; do
               spkid=`echo $nn | awk -F"_" '{print "" $1}'`
@@ -52,6 +40,7 @@ if [ $stage -le 1 ] ; then
           #sort data/$step/text -o data/$step/text
           #sort data/$step/phone.txt -o data/$step/phone.txt
     done
+
 fi
 
 if [ $stage -le 2 ] ; then
@@ -64,16 +53,31 @@ if [ $stage -le 2 ] ; then
 fi
 
 if [ $stage -le 3 ] ; then
+    rm -rf exp/extractor_$num_gauss
     sid/train_ivector_extractor.sh --cmd "$train_cmd -l mem_free=25G,ram_free=25G" \
       --num-iters 5 --ivector-dim $ivecdim exp/full_ubm_$num_gauss/final.ubm data/train \
       exp/extractor_$num_gauss
     sid/extract_ivectors.sh --cmd "$train_cmd -l mem_free=6G,ram_free=6G" --nj $nj \
-  exp/extractor_$num_gauss data/train exp/ivectors_train
+      exp/extractor_$num_gauss data/train exp/ivectors_train
 fi
 
 if [ $stage -le 4 ] ; then
+    rm -rf data/test
+    mkdir -p data/test
+    find $audio_dir_test -name "*.wav" | sort | $makeid | awk -v audiodir=$audio_dir_test '{line=$1" "audiodir"/"$1".wav"; print line}' > data/test/wav.scp
+    cat data/test/wav.scp | awk  '{
+    str_num = split($1, strs, "_");
+    speaker_id = strs[1];
+    line = $1" "speaker_id
+    print line
+    }' > data/test/utt2spk
+
+    sort data/test/utt2spk -o data/test/utt2spk
+    utils/utt2spk_to_spk2utt.pl data/test/utt2spk > data/test/spk2utt
+
     steps/make_mfcc.sh --mfcc-config conf/mfcc.conf data/test exp/make_mfcc $mfccdir
     sid/compute_vad_decision.sh --nj $nj --cmd "$train_cmd" data/test exp/make_vad $vaddir
     sid/extract_ivectors.sh --cmd "$train_cmd -l mem_free=6G,ram_free=6G" --nj $nj \
-  exp/extractor_$num_gauss data/test exp/ivectors_test
+      exp/extractor_$num_gauss data/test exp/ivectors_test
+    #copy-feats scp:exp/ivectors_test/spk_ivector.scp ark,t:- > spk_ivector_test
 fi

@@ -82,5 +82,5 @@ if [ $stage -le 2 ]; then
   $cmd $dir/log/speaker_mean.log \
     ivector-normalize-length scp:$dir/ivector.scp  ark:- \| \
     ivector-mean ark:$data/spk2utt ark:- ark:- ark,t:$dir/num_utts.ark \| \
-    ivector-normalize-length ark:- ark,scp:$dir/spk_ivector.ark,$dir/spk_ivector.scp || exit 1;
+    ivector-normalize-length ark:- ark,t,scp:$dir/spk_ivector.ark,$dir/spk_ivector.scp || exit 1;
 fi
