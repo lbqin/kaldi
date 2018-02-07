@@ -2,24 +2,20 @@ source cmd.sh
 source path.sh
 H=`pwd`  #exp home
 n=8
-thchs=/home/sooda/data/thchs30-openslr
-#sample_rate=16000
+thchs=/home/zhiming/data/thchs30-openslr
 sample_rate=48000
 FRAMESHIFT=0.005
-#featdir=/home/sooda/data/features/
-#corpus_dir=/home/sooda/data/tts/labixx1000_44k/
-featdir=/home/sooda/data/features/
-corpus_dir=/home/sooda/data/tts/rihui_48k/
-test_dir=/home/sooda/data/tts/test/
-#cppmary_base=/home/sooda/speech/cppmary_release/
-cppmary_base=/home/sooda/speech/cppmary/
-cppmary_bin=$cppmary_base/build/
+featdir=/home/zhiming/data/features/
+corpus_dir=/home/zhiming/data/tts/yuanqishaonv/
+test_dir=/home/zhiming/data/tts/test/
+cppmary_base=/home/zhiming/speech/cppmary_release/
 mix_mlsa=$cppmary_bin/mlsaSynWithFilenames
 expa=exp-align
 train=data/full
 lang=data/lang_phone
 dict=data/dict_phone
 phoneset=64
+cppmary_bin=$cppmary_base/build/
 
 exp=exp_dnn
 expdurdir=$exp/tts_dnn_dur_3_delta_quin5
@@ -31,8 +27,8 @@ LANG_PREP_PHONE=1
 EXTRACT_FEAT=0
 EXTRACT_FEAT_MARY=0
 ALIGNMENT_PHONE=1
-GENERATE_LABLE=1
-GENERATE_STATE=1
+GENERATE_LABLE=0
+GENERATE_STATE=0
 EXTRACT_MERLIN_FEATURE=2
 EXTRACT_TXT_FEATURE=0
 CONVERT_FEATURE=1
@@ -181,11 +177,11 @@ if [ $ALIGNMENT_PHONE -gt 0 ]; then
     steps/compute_cmvn_stats.sh data/full exp/make_mfcc/full $featdir || exit 1
 
     # Now running the normal kaldi recipe for forced alignment
-    steps/train_mono.sh --boost-silence 0.25 --nj $n --cmd "$train_cmd" \
+    steps/train_mono.sh --boost-silence 0.250 --nj $n --cmd "$train_cmd" \
                   $train $lang $expa/mono
-    steps/align_si.sh --boost-silence 0.25 --nj $n --cmd "$train_cmd" \
+    steps/align_si.sh --boost-silence 0.250 --nj $n --cmd "$train_cmd" \
                 $train $lang $expa/mono $expa/mono_ali
-    steps/train_deltas.sh  --boost-silence 0.25 --cmd "$train_cmd" \
+    steps/train_deltas.sh  --boost-silence 0.250 --cmd "$train_cmd" \
                  500 5000 $train $lang $expa/mono_ali $expa/tri1
 
     steps/align_si.sh  --nj $n --cmd "$train_cmd" \
@@ -285,14 +281,15 @@ if [ $GENERATE_STATE -gt 0 ]; then
     fi
 fi
 
-if [ $EXTRACT_MERLIN_FEATURE -gt 0 ]; then
+if [ $EXTRACT_MERLIN_FEATURE -gt 0 ]; then    
+    $cppmary_bin/genPhoneStateFile $expa/quin_ali_full/phones.txt $expa/quin_ali_full/states.tra $corpus_dir/$lab/
     cd $cppmary_base
     rm $corpus_dir/lab/*.lab
     mkdir -p $corpus_dir/lab
-    rm $corpus_dir/$lab/*.lab
-    cp -r $H/$lab $corpus_dir/$lab
-    echo "$cppmary_bin/genMerlinFeat "data/labixx.conf" $corpus_dir $H/$lab/ $corpus_dir/lab"
-    $cppmary_bin/genMerlinFeat "data/labixx.conf" $corpus_dir $H/$lab/ $corpus_dir/lab
+    #rm $corpus_dir/$lab/*.lab
+    #cp -r $H/$lab $corpus_dir/$lab
+    echo "$cppmary_bin/genMerlinFeat "data/labixx$phoneset.conf" $corpus_dir $corpus_dir/$lab/ $corpus_dir/lab"
+    $cppmary_bin/genMerlinFeat "data/labixx$phoneset.conf" $corpus_dir $corpus_dir/$lab/ $corpus_dir/lab
     cd $corpus_dir/lab
     ls $corpus_dir/lab | xargs -i basename {} .lab > $corpus_dir/basename.scp
     cd $H
@@ -304,8 +301,8 @@ fi
 
 if [ $EXTRACT_TXT_FEATURE -gt 0 ]; then
     cd $cppmary_base
-    echo "$cppmary_bin/genTextFeatureWithLab $cppmary_base/data/labixx.conf $corpus_dir $H/$lab/ $acoustic_textfeat $duration_textfeat"
-    $cppmary_bin/genTextFeatureWithLab "data/labixx.conf" $corpus_dir $H/$lab/ $acoustic_textfeat $duration_textfeat
+    echo "$cppmary_bin/genTextFeatureWithLab $cppmary_base/data/labixx$phoneset.conf $corpus_dir $H/$lab/ $acoustic_textfeat $duration_textfeat"
+    $cppmary_bin/genTextFeatureWithLab "data/labixx$phoneset.conf" $corpus_dir $H/$lab/ $acoustic_textfeat $duration_textfeat
     cd $H
     if [ $EXTRACT_TXT_FEATURE -eq 2 ]; then
         echo "exit after text feature"
