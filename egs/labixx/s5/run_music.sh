@@ -10,7 +10,7 @@ boot_silence=0.25
 #featdir=/home/sooda/data/features/
 #corpus_dir=/home/sooda/data/tts/labixx1000_44k/
 featdir=/home/research/data/features/
-corpus_dir=/home/research/data1/tts/yiminrap_48k/
+corpus_dir=/home/research/data1/tts/tuozimusic2_48k/
 test_dir=/home/research/data/tts/test/
 cppmary_base=/home/research/data/speech/cppmary_release/
 #cppmary_base=/home/research/
@@ -296,8 +296,8 @@ if [ $EXTRACT_MERLIN_FEATURE -gt 0 ]; then
     mkdir -p $corpus_dir/lab
     rm $corpus_dir/$lab/*.lab
     cp -r $H/$lab $corpus_dir/$lab
-    echo "$cppmary_bin/genMerlinFeat "data/labixx.conf" $corpus_dir $H/$lab/ $corpus_dir/lab"
-    $cppmary_bin/genMerlinFeat "data/labixx.conf" $corpus_dir $H/$lab/ $corpus_dir/lab
+    echo "$cppmary_bin/genMusicMerlinFeat "data/labixx.conf" $corpus_dir $H/$lab/ $corpus_dir/lab"
+    $cppmary_bin/genMusicMerlinFeat "data/labixx.conf" $corpus_dir $H/$lab/ $corpus_dir/lab
     cd $corpus_dir/lab
     ls $corpus_dir/lab | xargs -i basename {} .lab > $corpus_dir/basename.scp
     cd $H
