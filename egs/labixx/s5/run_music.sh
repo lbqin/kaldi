@@ -2,21 +2,14 @@ source cmd.sh
 source path.sh
 H=`pwd`  #exp home
 n=8
-thchs=/home/sooda/data/thchs30-openslr
-#sample_rate=16000
 sample_rate=48000
 FRAMESHIFT=0.005
 boot_silence=0.25
-#featdir=/home/sooda/data/features/
-#corpus_dir=/home/sooda/data/tts/labixx1000_44k/
-featdir=/home/research/data/features/
-corpus_dir=/home/research/data1/tts/tuozimusic2_48k/
-test_dir=/home/research/data/tts/test/
-cppmary_base=/home/research/data/speech/cppmary_release/
-#cppmary_base=/home/research/
-#cppmary_base=/home/research/speech/cppmary/
+featdir=/home/research/data1/features/
+corpus_dir=/home/research/data1/datasets/speech_huanshi/tts/tuozimusic2_48k/
+test_dir=/home/research/data1/datasets/speech_huanshi/tts/test/
+cppmary_base=/home/research/data1/projects/speech/cppmary_release/
 cppmary_bin=$cppmary_base/build/
-#cppmary_bin=$cppmary_base/build_0102/
 mix_mlsa=$cppmary_bin/mlsaSynWithFilenames
 expa=exp-align
 train=data/full
