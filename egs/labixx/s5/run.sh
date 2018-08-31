@@ -2,17 +2,13 @@ source cmd.sh
 source path.sh
 H=`pwd`  #exp home
 n=8
-thchs=/home/sooda/data/thchs30-openslr
-#sample_rate=16000
 sample_rate=48000
 FRAMESHIFT=0.005
-#featdir=/home/sooda/data/features/
-#corpus_dir=/home/sooda/data/tts/labixx1000_44k/
-featdir=/home/sooda/data/features/
-corpus_dir=/home/sooda/data/tts/rihui_48k/
-test_dir=/home/sooda/data/tts/test/
-#cppmary_base=/home/sooda/speech/cppmary_release/
-cppmary_base=/home/sooda/speech/cppmary/
+boot_silence=0.25
+featdir=/home/research/data1/features/
+corpus_dir=/home/research/data1/datasets/speech_huanshi/tts/nana_48k/
+test_dir=/home/research/data1/datasets/speech_huanshi/tts/test/
+cppmary_base=/home/research/data1/projects/speech/cppmary_release/
 cppmary_bin=$cppmary_base/build/
 mix_mlsa=$cppmary_bin/mlsaSynWithFilenames
 expa=exp-align
@@ -181,11 +177,11 @@ if [ $ALIGNMENT_PHONE -gt 0 ]; then
     steps/compute_cmvn_stats.sh data/full exp/make_mfcc/full $featdir || exit 1
 
     # Now running the normal kaldi recipe for forced alignment
-    steps/train_mono.sh --boost-silence 0.25 --nj $n --cmd "$train_cmd" \
+    steps/train_mono.sh --boost-silence $boot_silence --nj $n --cmd "$train_cmd" \
                   $train $lang $expa/mono
-    steps/align_si.sh --boost-silence 0.25 --nj $n --cmd "$train_cmd" \
+    steps/align_si.sh --boost-silence $boot_silence --nj $n --cmd "$train_cmd" \
                 $train $lang $expa/mono $expa/mono_ali
-    steps/train_deltas.sh  --boost-silence 0.25 --cmd "$train_cmd" \
+    steps/train_deltas.sh  --boost-silence $boot_silence --cmd "$train_cmd" \
                  500 5000 $train $lang $expa/mono_ali $expa/tri1
 
     steps/align_si.sh  --nj $n --cmd "$train_cmd" \
@@ -194,7 +190,7 @@ if [ $ALIGNMENT_PHONE -gt 0 ]; then
                  500 5000 $train $lang $expa/tri1_ali $expa/tri2
 
     # Create alignments
-    steps/align_si.sh  --nj $n --cmd "$train_cmd" \
+    steps/align_si.sh --nj $n --cmd "$train_cmd" \
         $train $lang $expa/tri2 $expa/tri2_ali_full
 
     steps/train_deltas.sh --cmd "$train_cmd" \
@@ -238,6 +234,7 @@ if [ $GENERATE_LABLE -gt 0 ]; then
             currenttime = currenttime + frameshift;
         }
         print lasttoken, lasttime, currenttime >> outfile
+	close(outfile)
     }'
 
     if [ $GENERATE_LABLE -eq 2 ]; then
@@ -266,6 +263,7 @@ if [ $GENERATE_STATE -gt 0 ]; then
             laststate = $i
         }
         printf "%d %d ", laststate, counter > outfile
+	close(outfile)
 
     }'
 
@@ -304,8 +302,8 @@ fi
 
 if [ $EXTRACT_TXT_FEATURE -gt 0 ]; then
     cd $cppmary_base
-    echo "$cppmary_bin/genTextFeatureWithLab $cppmary_base/data/labixx.conf $corpus_dir $H/$lab/ $acoustic_textfeat $duration_textfeat"
-    $cppmary_bin/genTextFeatureWithLab "data/labixx.conf" $corpus_dir $H/$lab/ $acoustic_textfeat $duration_textfeat
+    echo "$cppmary_bin/genTextFeatureWithLab $cppmary_base/data/labixx$phoneset.conf $corpus_dir $H/$lab/ $acoustic_textfeat $duration_textfeat"
+    $cppmary_bin/genTextFeatureWithLab "data/labixx$phoneset.conf" $corpus_dir $H/$lab/ $acoustic_textfeat $duration_textfeat
     cd $H
     if [ $EXTRACT_TXT_FEATURE -eq 2 ]; then
         echo "exit after text feature"
